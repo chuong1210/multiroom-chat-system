@@ -1,0 +1,324 @@
+@page "/rooms"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Rooms - Chat Room System</PageTitle>
+
+@if (AuthService.CurrentUser == null)
+{
+    <p>Loading...</p>
+    return;
+}
+
+<div class="rooms-container">
+    <div class="rooms-header">
+        <h2>Chat Rooms</h2>
+        <div class="header-actions">
+            <span class="user-info">👋 @AuthService.CurrentUser.Username</span>
+            <button class="btn btn-primary" @onclick="ShowCreateRoomModal">+ Tạo Room</button>
+            <button class="btn btn-secondary" @onclick="LogoutAsync">Đăng xuất</button>
+        </div>
+    </div>
+
+    <div class="rooms-tabs">
+        <button class="tab-btn @(activeTab == "my" ? "active" : "")" @onclick='() => SwitchTab("my")'>
+            My Rooms
+        </button>
+        <button class="tab-btn @(activeTab == "public" ? "active" : "")" @onclick='() => SwitchTab("public")'>
+            Public Rooms
+        </button>
+    </div>
+
+    <div class="search-box">
+        <input type="text" @bind="searchQuery" @bind:event="oninput" placeholder="🔍 Tìm kiếm rooms..." class="form-control" />
+    </div>
+
+    <div class="rooms-list">
+        @if (isLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border"></div>
+            </div>
+        }
+        else if (filteredRooms.Count == 0)
+        {
+            <div class="text-center py-5 text-muted">
+                <p>Không có room nào</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var room in filteredRooms)
+            {
+                <div class="room-card" @onclick="() => JoinRoom(room.Id)">
+                    <div class="room-header">
+                        <h5>@room.Name</h5>
+                        @if (room.IsPrivate)
+                        {
+                            <span class="badge bg-warning">🔒 Private</span>
+                        }
+                    </div>
+                    <p class="room-description">@room.Description</p>
+                    <div class="room-footer">
+                        <span class="badge bg-info">📁 @room.Topic</span>
+                        <span class="text-muted">👥 @room.MemberIds.Count members (@room.ActiveMembersCount online)</span>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@if (showCreateModal)
+{
+    <div class="modal-overlay" @onclick="HideCreateRoomModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h4>Tạo Room Mới</h4>
+            <EditForm Model="@createRoomModel" OnValidSubmit="@CreateRoomAsync">
+                <div class="mb-3">
+                    <label class="form-label">Tên Room</label>
+                    <InputText @bind-Value="createRoomModel.Name" class="form-control" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mô tả</label>
+                    <InputTextArea @bind-Value="createRoomModel.Description" class="form-control" rows="3" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Chủ đề</label>
+                    <InputText @bind-Value="createRoomModel.Topic" class="form-control" />
+                </div>
+                <div class="mb-3 form-check">
+                    <InputCheckbox @bind-Value="createRoomModel.IsPrivate" class="form-check-input" id="isPrivate" />
+                    <label class="form-check-label" for="isPrivate">Private Room</label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideCreateRoomModal">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Tạo Room</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<style>
+    .rooms-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .rooms-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .user-info {
+        font-weight: 500;
+    }
+
+    .rooms-tabs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-btn {
+        padding: 0.5rem 1.5rem;
+        border: none;
+        background: none;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+    }
+
+    .tab-btn.active {
+        border-bottom-color: #4A90E2;
+        color: #4A90E2;
+        font-weight: 600;
+    }
+
+    .search-box {
+        margin-bottom: 1.5rem;
+    }
+
+    .rooms-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .room-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .room-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    .room-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .room-description {
+        color: #666;
+        margin-bottom: 1rem;
+        min-height: 3rem;
+    }
+
+    .room-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 500px;
+    }
+</style>
+
+@code {
+    private List<RoomDto> rooms = new();
+    private List<RoomDto> filteredRooms = new();
+    private string activeTab = "my";
+    private string searchQuery = "";
+    private bool isLoading = false;
+    private bool showCreateModal = false;
+    private CreateRoomDto createRoomModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadRooms();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        FilterRooms();
+    }
+
+    private async Task LoadRooms()
+    {
+        isLoading = true;
+        try
+        {
+            if (activeTab == "my")
+            {
+                rooms = await ApiService.GetMyRoomsAsync();
+            }
+            else
+            {
+                rooms = await ApiService.GetPublicRoomsAsync();
+            }
+            FilterRooms();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FilterRooms()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredRooms = rooms;
+        }
+        else
+        {
+            var query = searchQuery.ToLower();
+            filteredRooms = rooms.Where(r =>
+                r.Name.ToLower().Contains(query) ||
+                r.Description.ToLower().Contains(query) ||
+                r.Topic.ToLower().Contains(query)
+            ).ToList();
+        }
+        StateHasChanged();
+    }
+
+    private async Task SwitchTab(string tab)
+    {
+        activeTab = tab;
+        searchQuery = "";
+        await LoadRooms();
+    }
+
+    private void ShowCreateRoomModal()
+    {
+        createRoomModel = new CreateRoomDto();
+        showCreateModal = true;
+    }
+
+    private void HideCreateRoomModal()
+    {
+        showCreateModal = false;
+    }
+
+    private async Task CreateRoomAsync()
+    {
+        var room = await ApiService.CreateRoomAsync(createRoomModel);
+        if (room != null)
+        {
+            showCreateModal = false;
+            await LoadRooms();
+            Navigation.NavigateTo($"/room/{room.Id}");
+        }
+    }
+
+    private void JoinRoom(string roomId)
+    {
+        Navigation.NavigateTo($"/room/{roomId}");
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}

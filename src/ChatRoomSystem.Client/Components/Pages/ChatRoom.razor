@@ -1,0 +1,388 @@
+@page "/room/{RoomId}"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject WebSocketService WebSocketService
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>@roomName - Chat Room</PageTitle>
+
+@if (AuthService.CurrentUser == null || room == null)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border"></div>
+        <p>Loading...</p>
+    </div>
+    return;
+}
+
+<div class="chat-room-container">
+    <!-- Header -->
+    <div class="room-header">
+        <button class="btn btn-link" @onclick="BackToRooms">← Back</button>
+        <div class="room-info">
+            <h4>@room.Name</h4>
+            <small class="text-muted">@room.Topic | @room.MemberIds.Count members</small>
+        </div>
+        <div class="connection-status">
+            @if (isConnected)
+            {
+                <span class="badge bg-success">● Connected</span>
+            }
+            else
+            {
+                <span class="badge bg-danger">○ Disconnected</span>
+            }
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="room-content">
+        <!-- Messages Area -->
+        <div class="messages-container" @ref="messagesContainer">
+            @foreach (var message in messages)
+            {
+                <div class="message @(message.SenderId == AuthService.CurrentUser.Id ? "message-own" : "message-other")">
+                    <div class="message-header">
+                        <strong>@message.SenderUsername</strong>
+                        <small class="text-muted">@message.Timestamp.ToLocalTime().ToString("HH:mm")</small>
+                    </div>
+                    <div class="message-content">@message.Content</div>
+                </div>
+            }
+
+            @if (typingUsers.Count > 0)
+            {
+                <div class="typing-indicator">
+                    <small class="text-muted">
+                        @string.Join(", ", typingUsers) đang typing...
+                    </small>
+                </div>
+            }
+        </div>
+
+        <!-- Input Area -->
+        <div class="message-input-container">
+            <input type="text"
+                   class="form-control"
+                   placeholder="Nhập tin nhắn..."
+                   @bind="messageText"
+                   @bind:event="oninput"
+                   @onkeydown="HandleKeyDown"
+                   @oninput="HandleTyping" />
+            <button class="btn btn-primary" @onclick="SendMessage" disabled="@(!isConnected || string.IsNullOrWhiteSpace(messageText))">
+                Gửi
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .chat-room-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+
+    .room-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 2rem;
+        background: white;
+        border-bottom: 1px solid #e0e0e0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .room-info h4 {
+        margin: 0;
+    }
+
+    .room-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 2rem;
+        background: #f5f5f5;
+    }
+
+    .message {
+        margin-bottom: 1rem;
+        max-width: 60%;
+    }
+
+    .message-own {
+        margin-left: auto;
+    }
+
+    .message-other {
+        margin-right: auto;
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.25rem;
+    }
+
+    .message-content {
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        word-wrap: break-word;
+    }
+
+    .message-own .message-content {
+        background: #4A90E2;
+        color: white;
+    }
+
+    .message-other .message-content {
+        background: white;
+        color: #333;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .typing-indicator {
+        padding: 0.5rem 1rem;
+        font-style: italic;
+    }
+
+    .message-input-container {
+        display: flex;
+        gap: 1rem;
+        padding: 1rem 2rem;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+    }
+
+    .message-input-container input {
+        flex: 1;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string RoomId { get; set; } = "";
+
+    private RoomDto? room;
+    private List<MessageDto> messages = new();
+    private HashSet<string> typingUsers = new();
+    private string messageText = "";
+    private string roomName = "Chat Room";
+    private bool isConnected = false;
+    private ElementReference messagesContainer;
+    private System.Timers.Timer? typingTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // Load room info
+        room = await ApiService.GetRoomAsync(RoomId);
+        if (room == null)
+        {
+            Navigation.NavigateTo("/rooms");
+            return;
+        }
+
+        roomName = room.Name;
+
+        // Load message history
+        var messagePage = await ApiService.GetRoomMessagesAsync(RoomId);
+        if (messagePage != null)
+        {
+            messages = messagePage.Messages;
+        }
+
+        // Connect WebSocket
+        await ConnectWebSocket();
+
+        // Subscribe to WebSocket events
+        WebSocketService.OnMessageReceived += HandleMessageReceived;
+        WebSocketService.OnUserJoinedRoom += HandleUserJoinedRoom;
+        WebSocketService.OnUserLeftRoom += HandleUserLeftRoom;
+        WebSocketService.OnUserTyping += HandleUserTyping;
+        WebSocketService.OnUserStoppedTyping += HandleUserStoppedTyping;
+        WebSocketService.OnConnected += HandleConnected;
+        WebSocketService.OnDisconnected += HandleDisconnected;
+
+        // Join room via WebSocket
+        if (isConnected)
+        {
+            await WebSocketService.JoinRoomAsync(RoomId);
+        }
+    }
+
+    private async Task ConnectWebSocket()
+    {
+        try
+        {
+            var token = await AuthService.GetTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+            {
+                await WebSocketService.ConnectAsync(token);
+                isConnected = WebSocketService.IsConnected;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebSocket connection error: {ex.Message}");
+        }
+    }
+
+    private void HandleConnected()
+    {
+        isConnected = true;
+        InvokeAsync(async () =>
+        {
+            await WebSocketService.JoinRoomAsync(RoomId);
+            StateHasChanged();
+        });
+    }
+
+    private void HandleDisconnected(string reason)
+    {
+        isConnected = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleMessageReceived(MessageDto message)
+    {
+        if (message.RoomId == RoomId)
+        {
+            InvokeAsync(() =>
+            {
+                messages.Add(message);
+                StateHasChanged();
+                ScrollToBottom();
+            });
+        }
+    }
+
+    private void HandleUserJoinedRoom(string roomId, string username)
+    {
+        if (roomId == RoomId)
+        {
+            // Show system message (optional)
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void HandleUserLeftRoom(string roomId, string username)
+    {
+        if (roomId == RoomId)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void HandleUserTyping(TypingPayload payload)
+    {
+        if (payload.RoomId == RoomId && payload.UserId != AuthService.CurrentUser?.Id)
+        {
+            InvokeAsync(() =>
+            {
+                typingUsers.Add(payload.Username);
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void HandleUserStoppedTyping(TypingPayload payload)
+    {
+        if (payload.RoomId == RoomId)
+        {
+            InvokeAsync(() =>
+            {
+                typingUsers.Remove(payload.Username);
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (!isConnected || string.IsNullOrWhiteSpace(messageText))
+        {
+            return;
+        }
+
+        await WebSocketService.SendChatMessageAsync(RoomId, messageText.Trim());
+        messageText = "";
+        await WebSocketService.SendTypingAsync(RoomId, false);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task HandleTyping()
+    {
+        if (!isConnected)
+        {
+            return;
+        }
+
+        // Send typing indicator
+        await WebSocketService.SendTypingAsync(RoomId, true);
+
+        // Reset timer
+        typingTimer?.Stop();
+        typingTimer = new System.Timers.Timer(2000);
+        typingTimer.Elapsed += async (sender, e) =>
+        {
+            await WebSocketService.SendTypingAsync(RoomId, false);
+            typingTimer?.Dispose();
+        };
+        typingTimer.Start();
+    }
+
+    private void ScrollToBottom()
+    {
+        // Scroll to bottom (requires JS interop in production)
+    }
+
+    private void BackToRooms()
+    {
+        Navigation.NavigateTo("/rooms");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Unsubscribe events
+        WebSocketService.OnMessageReceived -= HandleMessageReceived;
+        WebSocketService.OnUserJoinedRoom -= HandleUserJoinedRoom;
+        WebSocketService.OnUserLeftRoom -= HandleUserLeftRoom;
+        WebSocketService.OnUserTyping -= HandleUserTyping;
+        WebSocketService.OnUserStoppedTyping -= HandleUserStoppedTyping;
+        WebSocketService.OnConnected -= HandleConnected;
+        WebSocketService.OnDisconnected -= HandleDisconnected;
+
+        // Leave room
+        if (isConnected)
+        {
+            await WebSocketService.LeaveRoomAsync(RoomId);
+        }
+
+        typingTimer?.Dispose();
+    }
+}

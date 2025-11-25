@@ -1,0 +1,176 @@
+@page "/login"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Đăng nhập - Chat Room System</PageTitle>
+
+<div class="login-container">
+    <div class="login-card">
+        <h2 class="text-center mb-4">
+            @if (isLoginMode)
+            {
+                <span>Đăng nhập</span>
+            }
+            else
+            {
+                <span>Đăng ký</span>
+            }
+        </h2>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">@successMessage</div>
+        }
+
+        <EditForm Model="@loginModel" OnValidSubmit="@HandleSubmit">
+            <DataAnnotationsValidator />
+
+            @if (!isLoginMode)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <InputText @bind-Value="registerModel.Username" class="form-control" placeholder="Nhập username" />
+                </div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <InputText @bind-Value="loginModel.Email" class="form-control" type="email" placeholder="Nhập email" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <InputText @bind-Value="loginModel.Password" class="form-control" type="password" placeholder="Nhập password" />
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 mb-3" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                @(isLoginMode ? "Đăng nhập" : "Đăng ký")
+            </button>
+        </EditForm>
+
+        <div class="text-center">
+            <button class="btn btn-link" @onclick="ToggleMode">
+                @if (isLoginMode)
+                {
+                    <span>Chưa có tài khoản? Đăng ký ngay</span>
+                }
+                else
+                {
+                    <span>Đã có tài khoản? Đăng nhập</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .login-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .btn-primary {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+    }
+
+    .btn-primary:hover {
+        background-color: #357ABD;
+        border-color: #357ABD;
+    }
+</style>
+
+@code {
+    private LoginDto loginModel = new();
+    private RegisterDto registerModel = new();
+    private bool isLoginMode = true;
+    private bool isLoading = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if already logged in
+        if (AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/rooms");
+        }
+    }
+
+    private void ToggleMode()
+    {
+        isLoginMode = !isLoginMode;
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private async Task HandleSubmit()
+    {
+        errorMessage = null;
+        successMessage = null;
+        isLoading = true;
+
+        try
+        {
+            if (isLoginMode)
+            {
+                var (success, message) = await AuthService.LoginAsync(loginModel);
+                if (success)
+                {
+                    successMessage = message;
+                    await Task.Delay(500);
+                    Navigation.NavigateTo("/rooms");
+                }
+                else
+                {
+                    errorMessage = message;
+                }
+            }
+            else
+            {
+                registerModel.Email = loginModel.Email;
+                registerModel.Password = loginModel.Password;
+
+                var (success, message) = await AuthService.RegisterAsync(registerModel);
+                if (success)
+                {
+                    successMessage = message;
+                    await Task.Delay(500);
+                    Navigation.NavigateTo("/rooms");
+                }
+                else
+                {
+                    errorMessage = message;
+                }
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
