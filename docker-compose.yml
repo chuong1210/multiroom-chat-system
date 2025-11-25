@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Backend API với WebSockets
+  api:
+    build:
+      context: .
+      dockerfile: src/ChatRoomSystem.Api/Dockerfile
+    container_name: chatroom-api
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/chatroom.db
+    volumes:
+      - ./data:/app/data
+    networks:
+      - chatroom-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Blazor Frontend (Optional - nếu muốn tách riêng)
+  # client:
+  #   build:
+  #     context: .
+  #     dockerfile: src/ChatRoomSystem.Client/Dockerfile
+  #   container_name: chatroom-client
+  #   ports:
+  #     - "5001:8080"
+  #   environment:
+  #     - ASPNETCORE_ENVIRONMENT=Development
+  #     - ASPNETCORE_URLS=http://+:8080
+  #     - ApiBaseUrl=http://api:8080
+  #   depends_on:
+  #     - api
+  #   networks:
+  #     - chatroom-network
+  #   restart: unless-stopped
+
+networks:
+  chatroom-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
