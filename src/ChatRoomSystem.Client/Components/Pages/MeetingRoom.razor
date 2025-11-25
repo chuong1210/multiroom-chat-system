@@ -1,0 +1,239 @@
+@page "/meeting/{RoomId}"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@using ChatRoomSystem.Client.Components.Shared
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Meeting - @roomName</PageTitle>
+
+@if (AuthService.CurrentUser == null || room == null)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border"></div>
+        <p>Loading...</p>
+    </div>
+    return;
+}
+
+<div class="meeting-room-container">
+    <!-- Header -->
+    <div class="meeting-header">
+        <button class="btn btn-link" @onclick="BackToRooms">← Back</button>
+        <div class="room-info">
+            <h4>🎯 @room.Name - Meeting Room</h4>
+            <small class="text-muted">Collaborative workspace with video, chat, and whiteboard</small>
+        </div>
+        <div class="mode-switcher">
+            <button class="btn @(currentMode == "video" ? "btn-primary" : "btn-outline-primary") btn-sm"
+                    @onclick='() => SwitchMode("video")'>
+                📹 Video
+            </button>
+            <button class="btn @(currentMode == "whiteboard" ? "btn-primary" : "btn-outline-primary") btn-sm"
+                    @onclick='() => SwitchMode("whiteboard")'>
+                🎨 Whiteboard
+            </button>
+            <button class="btn @(currentMode == "chat" ? "btn-primary" : "btn-outline-primary") btn-sm"
+                    @onclick='() => SwitchMode("chat")'>
+                💬 Chat
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="meeting-content">
+        @if (currentMode == "video")
+        {
+            <div class="video-mode">
+                <VideoCall RoomId="@RoomId" RemoteName="@room.Name" />
+                <div class="meeting-info mt-3">
+                    <h5>Video Call Features:</h5>
+                    <ul>
+                        <li>✅ Real-time peer-to-peer video/audio</li>
+                        <li>✅ Toggle camera and microphone</li>
+                        <li>✅ Screen sharing support</li>
+                        <li>✅ Minimize video window</li>
+                        <li>⚠️ Note: Currently supports 1-1 calls. Group call coming soon!</li>
+                    </ul>
+                </div>
+            </div>
+        }
+        else if (currentMode == "whiteboard")
+        {
+            <div class="whiteboard-mode">
+                <Whiteboard RoomId="@RoomId" />
+                <div class="meeting-info mt-3">
+                    <h5>Whiteboard Features:</h5>
+                    <ul>
+                        <li>✅ Real-time collaborative drawing</li>
+                        <li>✅ Multiple tools: Pen, Eraser, Line, Rectangle, Circle</li>
+                        <li>✅ Color picker and stroke width adjustment</li>
+                        <li>✅ Clear canvas</li>
+                        <li>✅ Save/Export as PNG image</li>
+                        <li>✅ Touch support for tablets/phones</li>
+                    </ul>
+                </div>
+            </div>
+        }
+        else if (currentMode == "chat")
+        {
+            <div class="chat-mode">
+                <div class="alert alert-info">
+                    <strong>💬 Chat Mode</strong>
+                    <p>Go to <a href="/room/@RoomId">Chat Room Page</a> for full chat experience with:</p>
+                    <ul>
+                        <li>Real-time messaging</li>
+                        <li>Typing indicators</li>
+                        <li>Message history</li>
+                        <li>User join/leave notifications</li>
+                    </ul>
+                    <a href="/room/@RoomId" class="btn btn-primary">Go to Chat Room</a>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Instructions Panel -->
+    <div class="instructions-panel">
+        <h5>🚀 Quick Start Guide</h5>
+
+        <div class="accordion" id="instructionsAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#videoInstructions">
+                        📹 Video Call Setup
+                    </button>
+                </h2>
+                <div id="videoInstructions" class="accordion-collapse collapse show" data-bs-parent="#instructionsAccordion">
+                    <div class="accordion-body">
+                        <ol>
+                            <li>Click "Start Video Call" button</li>
+                            <li>Allow camera/microphone permissions when prompted</li>
+                            <li>Wait for other participant to join</li>
+                            <li>Use controls: Toggle video/audio, Share screen</li>
+                        </ol>
+                        <p><strong>Note:</strong> Requires modern browser with WebRTC support (Chrome, Firefox, Edge, Safari 11+)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#whiteboardInstructions">
+                        🎨 Whiteboard Usage
+                    </button>
+                </h2>
+                <div id="whiteboardInstructions" class="accordion-collapse collapse" data-bs-parent="#instructionsAccordion">
+                    <div class="accordion-body">
+                        <ol>
+                            <li>Select tool from toolbar (Pen, Eraser, Line, Rect, Circle)</li>
+                            <li>Choose color from color picker</li>
+                            <li>Adjust stroke width with slider</li>
+                            <li>Draw on canvas - changes sync in real-time!</li>
+                            <li>Click "Clear" to erase entire canvas</li>
+                            <li>Click "Save" to download as image</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .meeting-room-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .meeting-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+
+    .mode-switcher {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .meeting-content {
+        background: white;
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+        min-height: 500px;
+    }
+
+    .meeting-info {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #4A90E2;
+    }
+
+    .meeting-info ul {
+        margin-bottom: 0;
+    }
+
+    .instructions-panel {
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .accordion-button:not(.collapsed) {
+        background-color: #4A90E2;
+        color: white;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string RoomId { get; set; } = "";
+
+    private RoomDto? room;
+    private string roomName = "Meeting Room";
+    private string currentMode = "video";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // Load room info
+        room = await ApiService.GetRoomAsync(RoomId);
+        if (room == null)
+        {
+            Navigation.NavigateTo("/rooms");
+            return;
+        }
+
+        roomName = room.Name;
+    }
+
+    private void SwitchMode(string mode)
+    {
+        currentMode = mode;
+    }
+
+    private void BackToRooms()
+    {
+        Navigation.NavigateTo("/rooms");
+    }
+}

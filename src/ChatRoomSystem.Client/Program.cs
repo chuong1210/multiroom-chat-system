@@ -23,6 +23,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddScoped<WebSocketService>();
+builder.Services.AddScoped<WebRTCService>();
 
 var app = builder.Build();
 

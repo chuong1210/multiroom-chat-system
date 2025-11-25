@@ -1,0 +1,263 @@
+@using ChatRoomSystem.Client.Services
+@using ChatRoomSystem.Shared.Models
+@inject WebSocketService WebSocketService
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="whiteboard-container">
+    <!-- Toolbar -->
+    <div class="whiteboard-toolbar">
+        <div class="tool-group">
+            <button class="tool-btn @(currentTool == "pen" ? "active" : "")"
+                    @onclick='() => SelectTool("pen")'
+                    title="Pen">
+                ✏️ Pen
+            </button>
+
+            <button class="tool-btn @(currentTool == "eraser" ? "active" : "")"
+                    @onclick='() => SelectTool("eraser")'
+                    title="Eraser">
+                🧹 Eraser
+            </button>
+
+            <button class="tool-btn @(currentTool == "line" ? "active" : "")"
+                    @onclick='() => SelectTool("line")'
+                    title="Line">
+                📏 Line
+            </button>
+
+            <button class="tool-btn @(currentTool == "rect" ? "active" : "")"
+                    @onclick='() => SelectTool("rect")'
+                    title="Rectangle">
+                ▭ Rect
+            </button>
+
+            <button class="tool-btn @(currentTool == "circle" ? "active" : "")"
+                    @onclick='() => SelectTool("circle")'
+                    title="Circle">
+                ⭕ Circle
+            </button>
+        </div>
+
+        <div class="tool-group">
+            <label>Color:</label>
+            <input type="color" @bind="currentColor" @bind:event="oninput" class="color-picker" />
+        </div>
+
+        <div class="tool-group">
+            <label>Width:</label>
+            <input type="range" min="1" max="20" @bind="strokeWidth" @bind:event="oninput" class="width-slider" />
+            <span>@strokeWidth px</span>
+        </div>
+
+        <div class="tool-group">
+            <button class="btn btn-warning btn-sm" @onclick="ClearCanvas">
+                🗑️ Clear
+            </button>
+
+            <button class="btn btn-primary btn-sm" @onclick="SaveCanvas">
+                💾 Save
+            </button>
+        </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrapper">
+        <canvas id="whiteboard-canvas-@RoomId"
+                width="800"
+                height="600"
+                @ref="canvasElement">
+        </canvas>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert alert-info mt-2">@statusMessage</div>
+    }
+</div>
+
+<style>
+    .whiteboard-container {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .whiteboard-toolbar {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 0.5rem;
+        background: #f5f5f5;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+
+    .tool-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .tool-btn {
+        padding: 0.5rem 1rem;
+        border: 2px solid #ddd;
+        background: white;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .tool-btn:hover {
+        border-color: #4A90E2;
+        transform: translateY(-2px);
+    }
+
+    .tool-btn.active {
+        background: #4A90E2;
+        color: white;
+        border-color: #4A90E2;
+    }
+
+    .color-picker {
+        width: 50px;
+        height: 40px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .width-slider {
+        width: 100px;
+    }
+
+    .canvas-wrapper {
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+    }
+
+    #whiteboard-canvas-@RoomId {
+        display: block;
+        cursor: crosshair;
+        width: 100%;
+        height: auto;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string RoomId { get; set; } = "";
+
+    private ElementReference canvasElement;
+    private string currentTool = "pen";
+    private string currentColor = "#000000";
+    private int strokeWidth = 2;
+    private string? statusMessage;
+
+    // Drawing state
+    private bool isDrawing = false;
+    private double startX = 0;
+    private double startY = 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize canvas
+            await JSRuntime.InvokeVoidAsync("whiteboard.initialize", RoomId, DotNetObjectReference.Create(this));
+
+            // Subscribe to WebSocket events
+            WebSocketService.OnMessageReceived += HandleIncomingDraw;
+        }
+    }
+
+    private void SelectTool(string tool)
+    {
+        currentTool = tool;
+        _ = JSRuntime.InvokeVoidAsync("whiteboard.setTool", RoomId, tool);
+    }
+
+    private async Task ClearCanvas()
+    {
+        await JSRuntime.InvokeVoidAsync("whiteboard.clear", RoomId);
+
+        // Broadcast clear to room
+        await WebSocketService.SendAsync(new WebSocketMessage
+        {
+            Type = WebSocketMessageType.WhiteboardClear,
+            Data = System.Text.Json.JsonSerializer.Serialize(new WhiteboardPayload
+            {
+                RoomId = RoomId,
+                Action = "clear"
+            })
+        });
+
+        statusMessage = "Whiteboard cleared";
+        await Task.Delay(2000);
+        statusMessage = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveCanvas()
+    {
+        var dataUrl = await JSRuntime.InvokeAsync<string>("whiteboard.export", RoomId);
+
+        // Download image
+        await JSRuntime.InvokeVoidAsync("whiteboard.download", dataUrl, $"whiteboard-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+
+        statusMessage = "Whiteboard saved!";
+        await Task.Delay(2000);
+        statusMessage = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Callback từ JS khi user vẽ
+    /// </summary>
+    [JSInvokable]
+    public async Task OnDraw(string action, double x1, double y1, double x2, double y2)
+    {
+        // Broadcast stroke to room
+        var stroke = new WhiteboardStroke
+        {
+            Points = new List<WhiteboardPoint>
+            {
+                new WhiteboardPoint { X = x1, Y = y1 },
+                new WhiteboardPoint { X = x2, Y = y2 }
+            },
+            Color = currentColor,
+            Width = strokeWidth,
+            Tool = currentTool
+        };
+
+        await WebSocketService.SendAsync(new WebSocketMessage
+        {
+            Type = WebSocketMessageType.WhiteboardDraw,
+            Data = System.Text.Json.JsonSerializer.Serialize(new WhiteboardPayload
+            {
+                RoomId = RoomId,
+                Action = action,
+                Stroke = stroke
+            })
+        });
+    }
+
+    /// <summary>
+    /// Handle incoming draw from WebSocket
+    /// </summary>
+    private void HandleIncomingDraw(MessageDto message)
+    {
+        // This would be handled by whiteboard-specific WebSocket messages
+        // For now, we handle via OnWhiteboardData callback
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        WebSocketService.OnMessageReceived -= HandleIncomingDraw;
+        await JSRuntime.InvokeVoidAsync("whiteboard.dispose", RoomId);
+    }
+}
