@@ -2,6 +2,8 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using ChatRoomSystem.Shared.Models;
+using CustomWebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
+using NetWebSocketMessageType = System.Net.WebSockets.WebSocketMessageType;
 
 namespace ChatRoomSystem.Client.Services;
 
@@ -119,7 +121,7 @@ public class WebSocketService : IAsyncDisposable
             var bytes = Encoding.UTF8.GetBytes(json);
             var buffer = new ArraySegment<byte>(bytes);
 
-            await _webSocket!.SendAsync(buffer, WebSocketMessageType.Text, true, CancellationToken.None);
+            await _webSocket!.SendAsync(buffer, NetWebSocketMessageType.Text, true, CancellationToken.None);
 
             _logger.LogDebug($"Sent message type: {message.Type}");
         }
@@ -137,7 +139,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = WebSocketMessageType.JoinRoom,
+            Type = CustomWebSocketMessageType.JoinRoom,
             Data = JsonSerializer.Serialize(new JoinRoomPayload { RoomId = roomId }),
             Timestamp = DateTime.UtcNow
         };
@@ -152,7 +154,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = WebSocketMessageType.LeaveRoom,
+            Type = CustomWebSocketMessageType.LeaveRoom,
             Data = JsonSerializer.Serialize(new JoinRoomPayload { RoomId = roomId }),
             Timestamp = DateTime.UtcNow
         };
@@ -167,7 +169,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = WebSocketMessageType.ChatMessage,
+            Type = CustomWebSocketMessageType.ChatMessage,
             Data = JsonSerializer.Serialize(new ChatMessagePayload
             {
                 RoomId = roomId,
@@ -187,7 +189,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = isTyping ? WebSocketMessageType.UserTyping : WebSocketMessageType.UserStoppedTyping,
+            Type = isTyping ? CustomWebSocketMessageType.UserTyping : CustomWebSocketMessageType.UserStoppedTyping,
             Data = JsonSerializer.Serialize(new TypingPayload { RoomId = roomId }),
             Timestamp = DateTime.UtcNow
         };
@@ -202,7 +204,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = WebSocketMessageType.Ping,
+            Type = CustomWebSocketMessageType.Ping,
             Timestamp = DateTime.UtcNow
         };
 
@@ -225,7 +227,7 @@ public class WebSocketService : IAsyncDisposable
                     new ArraySegment<byte>(buffer),
                     cancellationToken);
 
-                if (result.MessageType == WebSocketMessageType.Close)
+                if (result.MessageType == NetWebSocketMessageType.Close)
                 {
                     _logger.LogInformation("WebSocket close received");
                     OnDisconnected?.Invoke("Server closed connection");
@@ -279,11 +281,11 @@ public class WebSocketService : IAsyncDisposable
         {
             switch (message.Type)
             {
-                case WebSocketMessageType.Pong:
+                case CustomWebSocketMessageType.Pong:
                     // Heartbeat response
                     break;
 
-                case WebSocketMessageType.MessageReceived:
+                case CustomWebSocketMessageType.MessageReceived:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var messageDto = JsonSerializer.Deserialize<MessageDto>(message.Data);
@@ -294,7 +296,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserJoinedRoom:
+                case CustomWebSocketMessageType.UserJoinedRoom:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -307,7 +309,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserLeftRoom:
+                case CustomWebSocketMessageType.UserLeftRoom:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -320,7 +322,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserOnline:
+                case CustomWebSocketMessageType.UserOnline:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -333,7 +335,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserOffline:
+                case CustomWebSocketMessageType.UserOffline:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -345,7 +347,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserTyping:
+                case CustomWebSocketMessageType.UserTyping:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var payload = JsonSerializer.Deserialize<TypingPayload>(message.Data);
@@ -356,7 +358,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.UserStoppedTyping:
+                case CustomWebSocketMessageType.UserStoppedTyping:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var payload = JsonSerializer.Deserialize<TypingPayload>(message.Data);
@@ -367,7 +369,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.FriendRequestReceived:
+                case CustomWebSocketMessageType.FriendRequestReceived:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var friendRequest = JsonSerializer.Deserialize<FriendRequestDto>(message.Data);
@@ -378,8 +380,8 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.TaskCreated:
-                case WebSocketMessageType.TaskUpdated:
+                case CustomWebSocketMessageType.TaskCreated:
+                case CustomWebSocketMessageType.TaskUpdated:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -388,7 +390,7 @@ public class WebSocketService : IAsyncDisposable
                             var taskDto = JsonSerializer.Deserialize<TaskDto>(data["task"].GetRawText());
                             if (taskDto != null)
                             {
-                                if (message.Type == WebSocketMessageType.TaskCreated)
+                                if (message.Type == CustomWebSocketMessageType.TaskCreated)
                                     OnTaskCreated?.Invoke(taskDto);
                                 else
                                     OnTaskUpdated?.Invoke(taskDto);
@@ -397,7 +399,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.TaskDeleted:
+                case CustomWebSocketMessageType.TaskDeleted:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
@@ -412,7 +414,7 @@ public class WebSocketService : IAsyncDisposable
                     }
                     break;
 
-                case WebSocketMessageType.Error:
+                case CustomWebSocketMessageType.Error:
                     if (!string.IsNullOrEmpty(message.Data))
                     {
                         var error = JsonSerializer.Deserialize<ErrorPayload>(message.Data);

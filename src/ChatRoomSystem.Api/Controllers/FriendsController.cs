@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using WebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
 
 namespace ChatRoomSystem.Api.Controllers;
 

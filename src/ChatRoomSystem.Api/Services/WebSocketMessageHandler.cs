@@ -3,6 +3,7 @@ using ChatRoomSystem.Data;
 using ChatRoomSystem.Data.Entities;
 using ChatRoomSystem.Shared.Models;
 using Microsoft.EntityFrameworkCore;
+using WebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
 
 namespace ChatRoomSystem.Api.Services;
 

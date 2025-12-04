@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ChatRoomSystem.Shared.Models;
 using Microsoft.JSInterop;
+using WebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
 
 namespace ChatRoomSystem.Client.Services;
 
