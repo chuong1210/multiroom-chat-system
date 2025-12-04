@@ -5,6 +5,7 @@ using System.Text.Json;
 using ChatRoomSystem.Api.Services;
 using ChatRoomSystem.Shared.Models;
 using Microsoft.IdentityModel.Tokens;
+using CustomWebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
 
 namespace ChatRoomSystem.Api.Middleware;
 
@@ -72,14 +73,14 @@ public class WebSocketMiddleware
         // Send authentication success message
         await connectionManager.SendMessageAsync(userId, new WebSocketMessage
         {
-            Type = WebSocketMessageType.AuthenticationSuccess,
+            Type = CustomWebSocketMessageType.AuthenticationSuccess,
             Data = JsonSerializer.Serialize(new { userId, username })
         });
 
         // Broadcast user online status
         await connectionManager.BroadcastToAllAsync(new WebSocketMessage
         {
-            Type = WebSocketMessageType.UserOnline,
+            Type = CustomWebSocketMessageType.UserOnline,
             Data = JsonSerializer.Serialize(new { userId, username })
         }, excludeUserId: userId);
 
@@ -156,7 +157,7 @@ public class WebSocketMiddleware
                     _logger.LogError(ex, $"Invalid JSON message from user {userId}: {messageJson}");
                     await connectionManager.SendMessageAsync(userId, new WebSocketMessage
                     {
-                        Type = WebSocketMessageType.Error,
+                        Type = CustomWebSocketMessageType.Error,
                         Data = JsonSerializer.Serialize(new ErrorPayload
                         {
                             Message = "Invalid message format",
@@ -169,7 +170,7 @@ public class WebSocketMiddleware
                     _logger.LogError(ex, $"Error handling message from user {userId}");
                     await connectionManager.SendMessageAsync(userId, new WebSocketMessage
                     {
-                        Type = WebSocketMessageType.Error,
+                        Type = CustomWebSocketMessageType.Error,
                         Data = JsonSerializer.Serialize(new ErrorPayload
                         {
                             Message = "Error processing message",
@@ -198,7 +199,7 @@ public class WebSocketMiddleware
         // Broadcast user offline status
         await connectionManager.BroadcastToAllAsync(new WebSocketMessage
         {
-            Type = WebSocketMessageType.UserOffline,
+            Type = CustomWebSocketMessageType.UserOffline,
             Data = JsonSerializer.Serialize(new { userId, username })
         });
 

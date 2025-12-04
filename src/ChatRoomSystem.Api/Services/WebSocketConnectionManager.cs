@@ -3,6 +3,8 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using ChatRoomSystem.Shared.Models;
+using CustomWebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
+using NetWebSocketMessageType = System.Net.WebSockets.WebSocketMessageType;
 
 namespace ChatRoomSystem.Api.Services;
 
@@ -160,7 +162,7 @@ public class WebSocketConnectionManager
             var bytes = Encoding.UTF8.GetBytes(json);
             var buffer = new ArraySegment<byte>(bytes);
 
-            await socket.SendAsync(buffer, WebSocketMessageType.Text, true, CancellationToken.None);
+            await socket.SendAsync(buffer, NetWebSocketMessageType.Text, true, CancellationToken.None);
         }
         catch (Exception ex)
         {
