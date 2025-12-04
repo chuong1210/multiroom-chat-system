@@ -19,11 +19,11 @@
 
         if (AuthService.IsAuthenticated)
         {
-            Navigation.NavigateTo("/rooms");
+            Navigation.NavigateTo("/rooms", forceLoad: true);
         }
         else
         {
-            Navigation.NavigateTo("/login");
+            Navigation.NavigateTo("/login", forceLoad: true);
         }
     }
 }

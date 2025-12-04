@@ -234,7 +234,7 @@
         // Check if already logged in
         if (AuthService.IsAuthenticated)
         {
-            Navigation.NavigateTo("/rooms");
+            Navigation.NavigateTo("/rooms", forceLoad: true);
         }
     }
 
@@ -260,7 +260,7 @@
                 {
                     successMessage = message;
                     await Task.Delay(500);
-                    Navigation.NavigateTo("/rooms");
+                    Navigation.NavigateTo("/rooms", forceLoad: true);
                 }
                 else
                 {
@@ -277,7 +277,7 @@
                 {
                     successMessage = message;
                     await Task.Delay(500);
-                    Navigation.NavigateTo("/rooms");
+                    Navigation.NavigateTo("/rooms", forceLoad: true);
                 }
                 else
                 {
