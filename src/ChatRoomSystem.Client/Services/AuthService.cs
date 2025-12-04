@@ -51,6 +51,11 @@ public class AuthService
                 OnAuthStateChanged?.Invoke();
             }
         }
+        catch (InvalidOperationException)
+        {
+            // JavaScript interop not available during prerendering - this is expected
+            // Auth state will be restored after the circuit is established
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initializing auth state");
