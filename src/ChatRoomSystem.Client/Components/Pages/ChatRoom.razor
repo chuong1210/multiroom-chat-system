@@ -70,7 +70,6 @@
                    class="form-control"
                    placeholder="Nhập tin nhắn..."
                    @bind="messageText"
-                   @bind:event="oninput"
                    @onkeydown="HandleKeyDown"
                    @oninput="HandleTyping" />
             <button class="btn btn-primary" @onclick="SendMessage" disabled="@(!isConnected || string.IsNullOrWhiteSpace(messageText))">
@@ -251,7 +250,7 @@
         box-shadow: var(--shadow-md);
     }
 
-    @media (max-width: 768px) {
+    @@media (max-width: 768px) {
         .room-header {
             padding: var(--spacing-md);
             flex-wrap: wrap;
