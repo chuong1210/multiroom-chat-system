@@ -1,7 +1,8 @@
-using ChatRoomSystem.Shared.Models;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using TaskStatus = ChatRoomSystem.Shared.Models.TaskStatus;
+using TaskPriority = ChatRoomSystem.Shared.Models.TaskPriority;
 
 namespace ChatRoomSystem.Data.Entities;
 
