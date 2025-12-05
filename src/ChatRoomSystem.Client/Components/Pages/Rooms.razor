@@ -4,13 +4,26 @@
 @inject AuthService AuthService
 @inject ApiService ApiService
 @inject NavigationManager Navigation
-@rendermode InteractiveServer
+@* @rendermode InteractiveServer *@
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>Rooms - Chat Room System</PageTitle>
 
+@if (isInitializing)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Đang khởi tạo...</span>
+        </div>
+    </div>
+    return;
+}
+
 @if (AuthService.CurrentUser == null)
 {
-    <p>Loading...</p>
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <p>Đang chuyển hướng đến trang đăng nhập...</p>
+    </div>
     return;
 }
 
@@ -124,14 +137,14 @@
         box-shadow: var(--shadow-lg);
     }
 
-    .rooms-header h2 {
-        margin: 0;
-        font-size: var(--font-size-3xl);
-        background: var(--bg-gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
+        .rooms-header h2 {
+            margin: 0;
+            font-size: var(--font-size-3xl);
+            background: var(--bg-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
     .header-actions {
         display: flex;
@@ -175,26 +188,26 @@
         position: relative;
     }
 
-    .tab-btn:hover {
-        background: var(--color-gray-100);
-        color: var(--color-gray-900);
-    }
+        .tab-btn:hover {
+            background: var(--color-gray-100);
+            color: var(--color-gray-900);
+        }
 
-    .tab-btn.active {
-        background: var(--color-primary);
-        color: white;
-        box-shadow: var(--shadow-md);
-    }
+        .tab-btn.active {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
 
     .search-box {
         margin-bottom: var(--spacing-xl);
     }
 
-    .search-box input {
-        font-size: var(--font-size-lg);
-        padding: var(--spacing-md) var(--spacing-lg);
-        box-shadow: var(--shadow-md);
-    }
+        .search-box input {
+            font-size: var(--font-size-lg);
+            padding: var(--spacing-md) var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
 
     .rooms-list {
         display: grid;
@@ -214,27 +227,27 @@
         overflow: hidden;
     }
 
-    .room-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: var(--bg-gradient);
-        opacity: 0;
-        transition: opacity var(--transition-base);
-    }
+        .room-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--bg-gradient);
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
 
-    .room-card:hover {
-        transform: translateY(-8px);
-        box-shadow: var(--shadow-xl);
-        border-color: var(--color-primary-light);
-    }
+        .room-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-xl);
+            border-color: var(--color-primary-light);
+        }
 
-    .room-card:hover::before {
-        opacity: 1;
-    }
+            .room-card:hover::before {
+                opacity: 1;
+            }
 
     .room-header {
         display: flex;
@@ -244,13 +257,13 @@
         gap: var(--spacing-sm);
     }
 
-    .room-header h5 {
-        margin: 0;
-        font-size: var(--font-size-xl);
-        font-weight: var(--font-weight-bold);
-        color: var(--color-gray-900);
-        flex: 1;
-    }
+        .room-header h5 {
+            margin: 0;
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--color-gray-900);
+            flex: 1;
+        }
 
     .room-description {
         color: var(--color-gray-600);
@@ -269,10 +282,10 @@
         border-top: 1px solid var(--color-gray-200);
     }
 
-    .room-footer .badge {
-        font-size: var(--font-size-xs);
-        padding: 0.375rem 0.75rem;
-    }
+        .room-footer .badge {
+            font-size: var(--font-size-xs);
+            padding: 0.375rem 0.75rem;
+        }
 
     @@media (max-width: 768px) {
         .rooms-container {
@@ -294,6 +307,66 @@
             grid-template-columns: 1fr;
         }
     }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s ease-out;
+    }
+
+    .modal-content {
+        background: white;
+        padding: var(--spacing-2xl);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-2xl);
+        max-width: 500px;
+        width: 90%;
+        animation: slideUp 0.3s ease-out;
+    }
+
+        .modal-content h4 {
+            margin-bottom: var(--spacing-xl);
+            color: var(--color-gray-900);
+        }
+
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--spacing-md);
+        margin-top: var(--spacing-xl);
+        padding-top: var(--spacing-lg);
+        border-top: 1px solid var(--color-gray-200);
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
 </style>
 
 @code {
@@ -302,20 +375,53 @@
     private string activeTab = "my";
     private string searchQuery = "";
     private bool isLoading = false;
+    private bool isInitializing = true; // ✅ Flag để track initialization state
     private bool showCreateModal = false;
     private CreateRoomDto createRoomModel = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await AuthService.InitializeAsync();
+        Console.WriteLine("🔵 [Rooms] OnInitializedAsync START");
 
-        if (!AuthService.IsAuthenticated)
+        try
         {
-            Navigation.NavigateTo("/login");
-            return;
-        }
+            // ✅ Đảm bảo AuthService được initialize
+            await AuthService.InitializeAsync();
 
-        await LoadRooms();
+            Console.WriteLine($"🔵 [Rooms] Auth initialized");
+            Console.WriteLine($"🔵 [Rooms] IsAuthenticated: {AuthService.IsAuthenticated}");
+            Console.WriteLine($"🔵 [Rooms] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
+
+            // ✅ Đợi một chút để đảm bảo state đã ổn định
+            await Task.Delay(100);
+
+            // ✅ Check authentication
+            if (!AuthService.IsAuthenticated)
+            {
+                Console.WriteLine("🔴 [Rooms] Not authenticated, redirecting to /login");
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            Console.WriteLine("🟢 [Rooms] User authenticated, loading rooms...");
+
+            // ✅ Load rooms
+            await LoadRooms();
+
+            Console.WriteLine("🟢 [Rooms] Rooms loaded successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Rooms] Error in OnInitializedAsync: {ex.Message}");
+            Console.WriteLine($"🔴 [Rooms] Stack trace: {ex.StackTrace}");
+        }
+        finally
+        {
+            // ✅ Kết thúc initialization
+            isInitializing = false;
+            StateHasChanged();
+            Console.WriteLine("🔵 [Rooms] OnInitializedAsync END");
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -326,21 +432,35 @@
     private async Task LoadRooms()
     {
         isLoading = true;
+        StateHasChanged();
+
         try
         {
+            Console.WriteLine($"🔵 [Rooms] LoadRooms - activeTab: {activeTab}");
+
             if (activeTab == "my")
             {
                 rooms = await ApiService.GetMyRoomsAsync();
+                Console.WriteLine($"🟢 [Rooms] Loaded {rooms.Count} 'my' rooms");
             }
             else
             {
                 rooms = await ApiService.GetPublicRoomsAsync();
+                Console.WriteLine($"🟢 [Rooms] Loaded {rooms.Count} 'public' rooms");
             }
+
             FilterRooms();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Rooms] Error loading rooms: {ex.Message}");
+            rooms = new List<RoomDto>();
+            filteredRooms = new List<RoomDto>();
         }
         finally
         {
             isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -364,6 +484,7 @@
 
     private async Task SwitchTab(string tab)
     {
+        Console.WriteLine($"🔵 [Rooms] Switching tab from '{activeTab}' to '{tab}'");
         activeTab = tab;
         searchQuery = "";
         await LoadRooms();
@@ -373,32 +494,51 @@
     {
         createRoomModel = new CreateRoomDto();
         showCreateModal = true;
+        StateHasChanged();
     }
 
     private void HideCreateRoomModal()
     {
         showCreateModal = false;
+        StateHasChanged();
     }
 
     private async Task CreateRoomAsync()
     {
-        var room = await ApiService.CreateRoomAsync(createRoomModel);
-        if (room != null)
+        try
         {
-            showCreateModal = false;
-            await LoadRooms();
-            Navigation.NavigateTo($"/room/{room.Id}");
+            Console.WriteLine($"🔵 [Rooms] Creating room: {createRoomModel.Name}");
+
+            var room = await ApiService.CreateRoomAsync(createRoomModel);
+
+            if (room != null)
+            {
+                Console.WriteLine($"🟢 [Rooms] Room created successfully: {room.Id}");
+                showCreateModal = false;
+                await LoadRooms();
+                Navigation.NavigateTo($"/room/{room.Id}");
+            }
+            else
+            {
+                Console.WriteLine("🔴 [Rooms] Failed to create room - returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Rooms] Error creating room: {ex.Message}");
         }
     }
 
     private void JoinRoom(string roomId)
     {
+        Console.WriteLine($"🔵 [Rooms] Joining room: {roomId}");
         Navigation.NavigateTo($"/room/{roomId}");
     }
 
     private async Task LogoutAsync()
     {
+        Console.WriteLine("🔵 [Rooms] Logging out...");
         await AuthService.LogoutAsync();
-        Navigation.NavigateTo("/login");
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }

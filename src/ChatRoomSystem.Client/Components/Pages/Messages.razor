@@ -1,0 +1,932 @@
+﻿@page "/messages"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
+
+<PageTitle>Messages - Chat Room System</PageTitle>
+
+<div class="messages-container">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="header-left">
+            <h2>💬 Messages</h2>
+            <p class="subtitle">Private conversations with friends</p>
+        </div>
+        <button class="btn btn-primary" @onclick="ShowNewChatModal">
+            <span>✉️ New Message</span>
+        </button>
+    </div>
+
+    <!-- Search -->
+    <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text"
+               class="search-input"
+               placeholder="Search conversations..."
+               @bind="searchQuery"
+               @bind:event="oninput" />
+    </div>
+
+    <!-- Conversations List -->
+    <div class="conversations-list">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border"></div>
+                <p>Loading conversations...</p>
+            </div>
+        }
+        else if (filteredConversations.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-illustration">
+                    <div class="empty-icon">💬</div>
+                    <div class="empty-circle"></div>
+                    <div class="empty-circle"></div>
+                    <div class="empty-circle"></div>
+                </div>
+                <h3>No messages yet</h3>
+                <p>Start a conversation with your friends!</p>
+                <button class="btn btn-primary" @onclick="ShowNewChatModal">
+                    Send your first message
+                </button>
+            </div>
+        }
+        else
+        {
+            @foreach (var conversation in filteredConversations)
+            {
+                <div class="conversation-item @(conversation.HasUnread ? "unread" : "")"
+                     @onclick="() => OpenChat(conversation.UserId)">
+                    <div class="conversation-avatar">
+                        @GetInitials(conversation.Username)
+                        @if (conversation.IsOnline)
+                        {
+                            <span class="status-indicator online"></span>
+                        }
+                    </div>
+                    <div class="conversation-content">
+                        <div class="conversation-header">
+                            <h4 class="conversation-name">@conversation.Username</h4>
+                            <span class="conversation-time">@GetTimeAgo(conversation.LastMessageTime)</span>
+                        </div>
+                        <div class="conversation-preview">
+                            <p class="last-message">
+                                @if (conversation.IsTyping)
+                                {
+                                    <span class="typing-indicator">
+                                        <span></span><span></span><span></span>
+                                    </span>
+                                }
+                                else
+                                {
+                                    @conversation.LastMessage
+                                }
+                            </p>
+                            @if (conversation.UnreadCount > 0)
+                            {
+                                <span class="unread-badge">@conversation.UnreadCount</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<!-- New Chat Modal -->
+@if (showNewChatModal)
+{
+    <div class="modal-overlay" @onclick="HideNewChatModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>✉️ New Message</h3>
+                <button class="btn-close" @onclick="HideNewChatModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Select a friend to start chatting</p>
+                <div class="search-box">
+                    <input type="text"
+                           class="form-control"
+                           placeholder="🔍 Search friends..."
+                           @bind="friendSearchQuery"
+                           @bind:event="oninput" />
+                </div>
+
+                @if (isLoadingFriends)
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div>
+                    </div>
+                }
+                else if (filteredFriends.Count > 0)
+                {
+                    <div class="friends-list">
+                        @foreach (var friend in filteredFriends)
+                        {
+                            <div class="friend-item" @onclick="() => StartNewChat(friend.Id)">
+                                <div class="friend-avatar">
+                                    @GetInitials(friend.Username)
+                                    @if (friend.IsOnline)
+                                    {
+                                        <span class="status-dot online"></span>
+                                    }
+                                </div>
+                                <div class="friend-info">
+                                    <strong>@friend.Username</strong>
+                                    <small class="status-text">
+                                        @if (friend.IsOnline)
+                                        {
+                                            <span class="text-success">● Online</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">○ Offline</span>
+                                        }
+                                    </small>
+                                </div>
+                                <div class="friend-action">
+                                    <button class="btn btn-sm btn-primary">
+                                        Chat
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4">
+                        <p>No friends found</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .messages-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+        min-height: 100vh;
+    }
+
+    /* Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .header-left h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 0.25rem 0;
+    }
+
+    .subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    /* Search Bar */
+    .search-bar {
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1.25rem;
+        z-index: 1;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 1rem 1rem 1rem 3rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        font-size: 1rem;
+        transition: all 0.2s;
+        background: white;
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+    /* Conversations List */
+    .conversations-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .conversation-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+    }
+
+        .conversation-item:hover {
+            transform: translateX(8px);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.15);
+            border-color: #6366f1;
+        }
+
+        .conversation-item.unread {
+            background: linear-gradient(to right, #fef3c7, white);
+            border-color: #fbbf24;
+        }
+
+    .conversation-avatar {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .status-indicator {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 3px solid white;
+        background: #9ca3af;
+    }
+
+        .status-indicator.online {
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
+
+    .conversation-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .conversation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .conversation-name {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .conversation-time {
+        font-size: 0.875rem;
+        color: #9ca3af;
+        white-space: nowrap;
+    }
+
+    .conversation-preview {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .last-message {
+        flex: 1;
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .unread-badge {
+        background: #ef4444;
+        color: white;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        min-width: 24px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+    }
+
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background: #6366f1;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+            .typing-indicator span:nth-child(2) {
+                animation-delay: 0.2s;
+            }
+
+            .typing-indicator span:nth-child(3) {
+                animation-delay: 0.4s;
+            }
+
+    @@keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+        }
+
+        30% {
+            transform: translateY(-8px);
+        }
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: white;
+        border-radius: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .empty-illustration {
+        position: relative;
+        margin: 0 auto 2rem;
+        width: 150px;
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .empty-icon {
+        font-size: 5rem;
+        position: relative;
+        z-index: 2;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    .empty-circle {
+        position: absolute;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        opacity: 0.1;
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+        .empty-circle:nth-child(2) {
+            width: 100px;
+            height: 100px;
+        }
+
+        .empty-circle:nth-child(3) {
+            width: 130px;
+            height: 130px;
+            animation-delay: 0.5s;
+        }
+
+        .empty-circle:nth-child(4) {
+            width: 160px;
+            height: 160px;
+            animation-delay: 1s;
+        }
+
+    @@keyframes float {
+        0%, 100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-15px);
+        }
+    }
+
+    @@keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 0.1;
+        }
+
+        50% {
+            transform: scale(1.1);
+            opacity: 0.2;
+        }
+    }
+
+    .empty-state h3 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.75rem;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        font-size: 1.05rem;
+        margin-bottom: 2rem;
+    }
+
+    /* Loading State */
+    .loading-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+        .loading-state p {
+            margin-top: 1rem;
+            color: #6b7280;
+        }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 24px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.3s;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        transition: all 0.2s;
+    }
+
+        .btn-close:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+            transform: rotate(90deg);
+        }
+
+    .modal-body {
+        padding: 2rem;
+        overflow-y: auto;
+    }
+
+    .modal-description {
+        color: #6b7280;
+        margin-bottom: 1.5rem;
+        font-size: 1rem;
+    }
+
+    .search-box {
+        margin-bottom: 1.5rem;
+    }
+
+        .search-box .form-control {
+            padding: 0.875rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+            .search-box .form-control:focus {
+                outline: none;
+                border-color: #6366f1;
+                box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+            }
+
+    /* Friends List in Modal */
+    .friends-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .friend-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: #f9fafb;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .friend-item:hover {
+            background: #f3f4f6;
+            transform: translateX(4px);
+        }
+
+    .friend-avatar {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .status-dot {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background: #9ca3af;
+    }
+
+        .status-dot.online {
+            background: #10b981;
+        }
+
+    .friend-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+        .friend-info strong {
+            color: #1f2937;
+            font-size: 1rem;
+        }
+
+    .status-text {
+        font-size: 0.875rem;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+    .btn-sm {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Scrollbar */
+    .conversations-list::-webkit-scrollbar,
+    .friends-list::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .conversations-list::-webkit-scrollbar-track,
+    .friends-list::-webkit-scrollbar-track {
+        background: #f3f4f6;
+        border-radius: 4px;
+    }
+
+    .conversations-list::-webkit-scrollbar-thumb,
+    .friends-list::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 4px;
+    }
+
+        .conversations-list::-webkit-scrollbar-thumb:hover,
+        .friends-list::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .messages-container {
+            padding: 1rem;
+        }
+
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .conversation-item {
+            padding: 1rem;
+        }
+
+        .conversation-avatar {
+            width: 48px;
+            height: 48px;
+            font-size: 1.1rem;
+        }
+
+        .modal-content {
+            width: 95%;
+        }
+    }
+</style>
+
+@code {
+    private class ConversationDto
+    {
+        public string UserId { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string LastMessage { get; set; } = "";
+        public DateTime LastMessageTime { get; set; }
+        public int UnreadCount { get; set; }
+        public bool IsOnline { get; set; }
+        public bool IsTyping { get; set; }
+        public bool HasUnread { get; set; }
+    }
+
+    private List<ConversationDto> conversations = new();
+    private List<ConversationDto> filteredConversations = new();
+    private List<UserDto> friends = new();
+    private List<UserDto> filteredFriends = new();
+    private string searchQuery = "";
+    private string friendSearchQuery = "";
+    private bool isLoading = false;
+    private bool isLoadingFriends = false;
+    private bool showNewChatModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadConversations();
+    }
+
+    private async Task LoadConversations()
+    {
+        isLoading = true;
+        try
+        {
+            // TODO: Load actual conversations from API
+            // For now, create mock data
+            await Task.Delay(500);
+
+            conversations = new List<ConversationDto>
+            {
+                new ConversationDto
+                {
+                    UserId = "user1",
+                    Username = "Alice Johnson",
+                    LastMessage = "Hey! How are you doing?",
+                    LastMessageTime = DateTime.UtcNow.AddMinutes(-5),
+                    UnreadCount = 2,
+                    IsOnline = true,
+                    HasUnread = true
+                },
+                new ConversationDto
+                {
+                    UserId = "user2",
+                    Username = "Bob Smith",
+                    LastMessage = "Sure, see you tomorrow!",
+                    LastMessageTime = DateTime.UtcNow.AddHours(-2),
+                    UnreadCount = 0,
+                    IsOnline = false,
+                    HasUnread = false
+                },
+                new ConversationDto
+                {
+                    UserId = "user3",
+                    Username = "Charlie Brown",
+                    LastMessage = "Thanks for your help!",
+                    LastMessageTime = DateTime.UtcNow.AddDays(-1),
+                    UnreadCount = 0,
+                    IsOnline = true,
+                    HasUnread = false,
+                    IsTyping = false
+                }
+            };
+
+            FilterConversations();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FilterConversations()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredConversations = conversations;
+        }
+        else
+        {
+            var query = searchQuery.ToLower();
+            filteredConversations = conversations
+                .Where(c => c.Username.ToLower().Contains(query) ||
+                           c.LastMessage.ToLower().Contains(query))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private async Task ShowNewChatModal()
+    {
+        showNewChatModal = true;
+        await LoadFriends();
+    }
+
+    private void HideNewChatModal()
+    {
+        showNewChatModal = false;
+        friendSearchQuery = "";
+    }
+
+    private async Task LoadFriends()
+    {
+        isLoadingFriends = true;
+        try
+        {
+            friends = await ApiService.GetFriendsAsync();
+            FilterFriends();
+        }
+        finally
+        {
+            isLoadingFriends = false;
+        }
+    }
+
+    private void FilterFriends()
+    {
+        if (string.IsNullOrWhiteSpace(friendSearchQuery))
+        {
+            filteredFriends = friends;
+        }
+        else
+        {
+            var query = friendSearchQuery.ToLower();
+            filteredFriends = friends
+                .Where(f => f.Username.ToLower().Contains(query) ||
+                           f.Email.ToLower().Contains(query))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void StartNewChat(string friendId)
+    {
+        Navigation.NavigateTo($"/chat/{friendId}");
+    }
+
+    private void OpenChat(string userId)
+    {
+        Navigation.NavigateTo($"/chat/{userId}");
+    }
+
+    private string GetInitials(string? username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return "?";
+
+        var parts = username.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return username.Length >= 2
+            ? username.Substring(0, 2).ToUpper()
+            : username[0].ToString().ToUpper();
+    }
+
+    private string GetTimeAgo(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d";
+
+        return dateTime.ToString("MMM dd");
+    }
+}

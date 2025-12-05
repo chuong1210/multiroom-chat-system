@@ -1,6 +1,7 @@
 using Blazored.LocalStorage;
 using ChatRoomSystem.Client.Components;
 using ChatRoomSystem.Client.Services;
+using Microsoft.AspNetCore.Components.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,9 +22,11 @@ builder.Services.AddScoped(sp =>
 
 // Application Services
 builder.Services.AddScoped<AuthService>();
+
 builder.Services.AddScoped<ApiService>();
 builder.Services.AddScoped<WebSocketService>();
 builder.Services.AddScoped<WebRTCService>();
+builder.Services.AddAuthorizationCore();
 
 var app = builder.Build();
 

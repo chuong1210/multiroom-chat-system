@@ -1,0 +1,764 @@
+﻿@page "/friends"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>Friends - Chat Room System</PageTitle>
+
+<div class="friends-container">
+    <!-- Header -->
+    <div class="page-header">
+        <h2>👥 Friends</h2>
+        <button class="btn btn-primary" @onclick="ShowSearchModal">
+            <span>➕ Add Friend</span>
+        </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab @(activeTab == "friends" ? "active" : "")" @onclick='() => SwitchTab("friends")'>
+            My Friends (@friends.Count)
+        </button>
+        <button class="tab @(activeTab == "requests" ? "active" : "")" @onclick='() => SwitchTab("requests")'>
+            Friend Requests (@friendRequests.Count)
+        </button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border"></div>
+                <p>Loading...</p>
+            </div>
+        }
+        else if (activeTab == "friends")
+        {
+            <!-- Friends List -->
+            @if (friends.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">😢</div>
+                    <h3>No friends yet</h3>
+                    <p>Start by searching and adding friends!</p>
+                    <button class="btn btn-primary" @onclick="ShowSearchModal">Add Friend</button>
+                </div>
+            }
+            else
+            {
+                <div class="friends-grid">
+                    @foreach (var friend in friends)
+                    {
+                        <div class="friend-card">
+                            <div class="friend-avatar">
+                                @GetInitials(friend.Username)
+                                <span class="status-dot @(friend.IsOnline ? "online" : "offline")"></span>
+                            </div>
+                            <div class="friend-info">
+                                <h4>@friend.Username</h4>
+                                <p class="status">
+                                    @if (friend.IsOnline)
+                                    {
+                                        <span class="online">● Online</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="offline">○ Last seen @GetRelativeTime(friend.LastSeen)</span>
+                                    }
+                                </p>
+                            </div>
+                            <div class="friend-actions">
+                                <button class="btn btn-sm btn-primary" @onclick="() => StartChat(friend.Id)">
+                                    💬 Chat
+                                </button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => RemoveFriend(friend.Id)">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <!-- Friend Requests -->
+            @if (friendRequests.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <h3>No pending requests</h3>
+                    <p>You don't have any friend requests at the moment.</p>
+                </div>
+            }
+            else
+            {
+                <div class="requests-list">
+                    @foreach (var request in friendRequests)
+                    {
+                        <div class="request-card">
+                            <div class="request-avatar">
+                                @GetInitials(request.FromUsername)
+                            </div>
+                            <div class="request-info">
+                                <h4>@request.FromUsername</h4>
+                                <p class="request-time">@GetRelativeTime(request.CreatedAt)</p>
+                            </div>
+                            <div class="request-actions">
+                                <button class="btn btn-sm btn-success" @onclick="() => AcceptRequest(request.Id)">
+                                    ✓ Accept
+                                </button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => RejectRequest(request.Id)">
+                                    ✕ Reject
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<!-- Search Modal -->
+@if (showSearchModal)
+{
+    <div class="modal-overlay" @onclick="HideSearchModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>🔍 Search Users</h3>
+                <button class="btn-close" @onclick="HideSearchModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-box">
+                    <input type="text"
+                           class="form-control"
+                           placeholder="Search by username or email..."
+                           @bind="searchQuery"
+                           @bind:event="oninput"
+                           @onkeyup="HandleSearch" />
+                </div>
+
+                @if (isSearching)
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div>
+                    </div>
+                }
+                else if (searchResults.Count > 0)
+                {
+                    <div class="search-results">
+                        @foreach (var user in searchResults)
+                        {
+                            <div class="search-result-item">
+                                <div class="user-avatar">@GetInitials(user.Username)</div>
+                                <div class="user-info">
+                                    <strong>@user.Username</strong>
+                                    <small>@user.Email</small>
+                                </div>
+                                <button class="btn btn-sm btn-primary"
+                                        @onclick="() => SendFriendRequest(user.Id)"
+                                        disabled="@IsFriendOrRequested(user.Id)">
+                                    @if (IsFriendOrRequested(user.Id))
+                                    {
+                                        <span>✓ Added</span>
+                                    }
+                                    else
+                                    {
+                                        <span>+ Add</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(searchQuery))
+                {
+                    <div class="text-center text-muted py-3">
+                        <p>No users found</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .friends-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+        .page-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+        }
+
+    /* Tabs */
+    .tabs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .tab {
+        padding: 1rem 2rem;
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #6b7280;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .tab:hover {
+            color: #6366f1;
+        }
+
+        .tab.active {
+            color: #6366f1;
+            border-bottom-color: #6366f1;
+        }
+
+    /* Friends Grid */
+    .friends-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .friend-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: all 0.2s;
+    }
+
+        .friend-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+    .friend-avatar {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .status-dot {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid white;
+    }
+
+        .status-dot.online {
+            background: #10b981;
+        }
+
+        .status-dot.offline {
+            background: #9ca3af;
+        }
+
+    .friend-info {
+        flex: 1;
+    }
+
+        .friend-info h4 {
+            margin: 0 0 0.25rem 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .friend-info .status {
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+            .friend-info .status .online {
+                color: #10b981;
+            }
+
+            .friend-info .status .offline {
+                color: #9ca3af;
+            }
+
+    .friend-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* Requests List */
+    .requests-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .request-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .request-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .request-info {
+        flex: 1;
+    }
+
+        .request-info h4 {
+            margin: 0 0 0.25rem 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+    .request-time {
+        font-size: 0.875rem;
+        color: #9ca3af;
+        margin: 0;
+    }
+
+    .request-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-icon {
+        font-size: 5rem;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    /* Loading State */
+    .loading-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 20px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.3s;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn-close:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+
+    .search-box {
+        margin-bottom: 1.5rem;
+    }
+
+    .search-results {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .search-result-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: #f9fafb;
+        transition: all 0.2s;
+    }
+
+        .search-result-item:hover {
+            background: #f3f4f6;
+        }
+
+    .user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .user-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .user-info strong {
+            color: #1f2937;
+            font-size: 1rem;
+        }
+
+        .user-info small {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+
+    /* Buttons */
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: #6366f1;
+        color: white;
+    }
+
+        .btn-primary:hover {
+            background: #4f46e5;
+            transform: translateY(-2px);
+        }
+
+    .btn-success {
+        background: #10b981;
+        color: white;
+    }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+    .btn-sm {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .friends-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .friend-card {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .friend-actions {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+@code {
+    private List<UserDto> friends = new();
+    private List<FriendRequestDto> friendRequests = new();
+    private List<UserDto> searchResults = new();
+    private string activeTab = "friends";
+    private bool isLoading = false;
+    private bool showSearchModal = false;
+    private bool isSearching = false;
+    private string searchQuery = "";
+    private HashSet<string> addedFriendIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            if (activeTab == "friends")
+            {
+                friends = await ApiService.GetFriendsAsync();
+            }
+            else
+            {
+                friendRequests = await ApiService.GetFriendRequestsAsync();
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SwitchTab(string tab)
+    {
+        activeTab = tab;
+        await LoadData();
+    }
+
+    private void ShowSearchModal()
+    {
+        showSearchModal = true;
+        searchQuery = "";
+        searchResults.Clear();
+    }
+
+    private void HideSearchModal()
+    {
+        showSearchModal = false;
+    }
+
+    private async Task HandleSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || searchQuery.Length < 2)
+        {
+            searchResults.Clear();
+            return;
+        }
+
+        isSearching = true;
+        try
+        {
+            await Task.Delay(300); // Debounce
+            searchResults = await ApiService.SearchUsersAsync(searchQuery);
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task SendFriendRequest(string userId)
+    {
+        var success = await ApiService.SendFriendRequestAsync(userId);
+        if (success)
+        {
+            addedFriendIds.Add(userId);
+            StateHasChanged();
+        }
+    }
+
+    private bool IsFriendOrRequested(string userId)
+    {
+        return friends.Any(f => f.Id == userId) || addedFriendIds.Contains(userId);
+    }
+
+    private async Task AcceptRequest(string requestId)
+    {
+        var success = await ApiService.RespondFriendRequestAsync(requestId, true);
+        if (success)
+        {
+            await LoadData();
+        }
+    }
+
+    private async Task RejectRequest(string requestId)
+    {
+        var success = await ApiService.RespondFriendRequestAsync(requestId, false);
+        if (success)
+        {
+            await LoadData();
+        }
+    }
+
+    private async Task RemoveFriend(string friendId)
+    {
+        // TODO: Implement remove friend
+        // await ApiService.RemoveFriendAsync(friendId);
+        await LoadData();
+    }
+
+    private void StartChat(string friendId)
+    {
+        Navigation.NavigateTo($"/chat/{friendId}");
+    }
+
+    private string GetInitials(string? username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return "?";
+
+        var parts = username.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return username.Length >= 2
+            ? username.Substring(0, 2).ToUpper()
+            : username[0].ToString().ToUpper();
+    }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM dd");
+    }
+}

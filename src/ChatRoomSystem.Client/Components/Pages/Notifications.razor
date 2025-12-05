@@ -1,0 +1,846 @@
+﻿@page "/notifications"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
+
+<PageTitle>Notifications - Chat Room System</PageTitle>
+
+<div class="notifications-container">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="header-left">
+            <h2>🔔 Notifications</h2>
+            <p class="subtitle">Stay updated with your activities</p>
+        </div>
+        <div class="header-actions">
+            @if (unreadCount > 0)
+            {
+                <button class="btn btn-secondary" @onclick="MarkAllAsRead">
+                    <span>✓ Mark all as read</span>
+                </button>
+            }
+            <button class="btn-icon" @onclick="LoadNotifications" title="Refresh">
+                <span class="@(isRefreshing ? "spinning" : "")">🔄</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="filter-tabs">
+        <button class="filter-tab @(activeFilter == "all" ? "active" : "")"
+                @onclick='() => SetFilter("all")'>
+            All (@notifications.Count)
+        </button>
+        <button class="filter-tab @(activeFilter == "unread" ? "active" : "")"
+                @onclick='() => SetFilter("unread")'>
+            Unread (@unreadCount)
+        </button>
+        <button class="filter-tab @(activeFilter == "friends" ? "active" : "")"
+                @onclick='() => SetFilter("friends")'>
+            Friends
+        </button>
+        <button class="filter-tab @(activeFilter == "rooms" ? "active" : "")"
+                @onclick='() => SetFilter("rooms")'>
+            Rooms
+        </button>
+        <button class="filter-tab @(activeFilter == "mentions" ? "active" : "")"
+                @onclick='() => SetFilter("mentions")'>
+            Mentions
+        </button>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="notifications-list">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border"></div>
+                <p>Loading notifications...</p>
+            </div>
+        }
+        else if (filteredNotifications.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-illustration">
+                    <div class="notification-bell">
+                        <span>🔔</span>
+                        <div class="bell-wave"></div>
+                        <div class="bell-wave"></div>
+                        <div class="bell-wave"></div>
+                    </div>
+                </div>
+                <h3>@GetEmptyStateTitle()</h3>
+                <p>@GetEmptyStateMessage()</p>
+            </div>
+        }
+        else
+        {
+            <div class="notifications-grid">
+                @foreach (var notification in filteredNotifications)
+                {
+                    <div class="notification-card @(notification.IsRead ? "read" : "unread")"
+                         @onclick="() => HandleNotificationClick(notification)">
+                        <div class="notification-icon @notification.Type.ToString().ToLower()">
+                            @GetNotificationIcon(notification.Type)
+                        </div>
+                        <div class="notification-content">
+                            <div class="notification-header">
+                                <h4>@notification.Title</h4>
+                                <span class="notification-time">@GetTimeAgo(notification.CreatedAt)</span>
+                            </div>
+                            <p class="notification-message">@notification.Message</p>
+                            @if (!string.IsNullOrEmpty(notification.ActionText))
+                            {
+                                <button class="notification-action" @onclick:stopPropagation="true"
+                                        @onclick="() => HandleAction(notification)">
+                                    @notification.ActionText →
+                                </button>
+                            }
+                        </div>
+                        @if (!notification.IsRead)
+                        {
+                            <div class="unread-indicator"></div>
+                        }
+                        <button class="btn-dismiss"
+                                @onclick:stopPropagation="true"
+                                @onclick="() => DismissNotification(notification.Id)"
+                                title="Dismiss">
+                            ✕
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .notifications-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem;
+        min-height: 100vh;
+    }
+
+    /* Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .header-left h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 0.25rem 0;
+    }
+
+    .subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .btn-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        font-size: 1.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+        .btn-icon:hover {
+            background: #f3f4f6;
+            border-color: #6366f1;
+            transform: scale(1.05);
+        }
+
+    .spinning {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Filter Tabs */
+    .filter-tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 2rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+    }
+
+        .filter-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .filter-tabs::-webkit-scrollbar-track {
+            background: #f3f4f6;
+        }
+
+        .filter-tabs::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+
+    .filter-tab {
+        padding: 0.75rem 1.5rem;
+        border: 2px solid #e5e7eb;
+        background: white;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+
+        .filter-tab:hover {
+            border-color: #6366f1;
+            color: #6366f1;
+        }
+
+        .filter-tab.active {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+    /* Notifications Grid */
+    .notifications-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .notification-card {
+        position: relative;
+        display: flex;
+        gap: 1rem;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+    }
+
+        .notification-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border-color: #e5e7eb;
+        }
+
+        .notification-card.unread {
+            background: linear-gradient(to right, #f0f9ff, white);
+            border-left: 4px solid #6366f1;
+        }
+
+            .notification-card.unread:hover {
+                border-left-color: #4f46e5;
+            }
+
+    /* Notification Icon */
+    .notification-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+        .notification-icon.friendrequest {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+        }
+
+        .notification-icon.friendaccepted {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .notification-icon.newmessage {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .notification-icon.roominvite {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
+        .notification-icon.mention {
+            background: linear-gradient(135deg, #ec4899, #db2777);
+        }
+
+        .notification-icon.system {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+    /* Notification Content */
+    .notification-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .notification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+        .notification-header h4 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+    .notification-time {
+        font-size: 0.875rem;
+        color: #9ca3af;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .notification-message {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0 0 0.75rem 0;
+        line-height: 1.5;
+    }
+
+    .notification-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: #f3f4f6;
+        border: none;
+        border-radius: 8px;
+        color: #6366f1;
+        font-weight: 600;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .notification-action:hover {
+            background: #6366f1;
+            color: white;
+            transform: translateX(4px);
+        }
+
+    /* Unread Indicator */
+    .unread-indicator {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        width: 10px;
+        height: 10px;
+        background: #6366f1;
+        border-radius: 50%;
+        box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        50% {
+            transform: scale(1.2);
+            opacity: 0.8;
+        }
+    }
+
+    /* Dismiss Button */
+    .btn-dismiss {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        font-size: 1.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        opacity: 0;
+    }
+
+    .notification-card:hover .btn-dismiss {
+        opacity: 1;
+    }
+
+    .btn-dismiss:hover {
+        background: #fee2e2;
+        color: #ef4444;
+        transform: scale(1.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: white;
+        border-radius: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .empty-illustration {
+        margin: 0 auto 2rem;
+        width: 150px;
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .notification-bell {
+        font-size: 5rem;
+        position: relative;
+        z-index: 2;
+        animation: bellRing 3s ease-in-out infinite;
+    }
+
+    @@keyframes bellRing {
+        0%, 90%, 100% {
+            transform: rotate(0deg);
+        }
+
+        92%, 96% {
+            transform: rotate(-15deg);
+        }
+
+        94%, 98% {
+            transform: rotate(15deg);
+        }
+    }
+
+    .bell-wave {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        border: 3px solid #6366f1;
+        opacity: 0;
+        animation: waveExpand 3s ease-in-out infinite;
+    }
+
+        .bell-wave:nth-child(2) {
+            animation-delay: 0.5s;
+        }
+
+        .bell-wave:nth-child(3) {
+            animation-delay: 1s;
+        }
+
+    @@keyframes waveExpand {
+        0% {
+            width: 80px;
+            height: 80px;
+            opacity: 0;
+        }
+
+        50% {
+            opacity: 0.3;
+        }
+
+        100% {
+            width: 150px;
+            height: 150px;
+            opacity: 0;
+        }
+    }
+
+    .empty-state h3 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.75rem;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        font-size: 1.05rem;
+    }
+
+    /* Loading State */
+    .loading-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+        .loading-state p {
+            margin-top: 1rem;
+            color: #6b7280;
+        }
+
+    /* Buttons */
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .btn-secondary {
+        background: white;
+        color: #6366f1;
+        border: 2px solid #6366f1;
+    }
+
+        .btn-secondary:hover {
+            background: #6366f1;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .notifications-container {
+            padding: 1rem;
+        }
+
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .header-actions {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .notification-card {
+            padding: 1rem;
+        }
+
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+            font-size: 1.25rem;
+        }
+
+        .notification-header {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .unread-indicator {
+            top: 1rem;
+            right: 1rem;
+        }
+    }
+</style>
+
+@code {
+    private enum NotificationType
+    {
+        FriendRequest,
+        FriendAccepted,
+        NewMessage,
+        RoomInvite,
+        Mention,
+        System
+    }
+
+    private class NotificationDto
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public NotificationType Type { get; set; }
+        public string Title { get; set; } = "";
+        public string Message { get; set; } = "";
+        public string? ActionText { get; set; }
+        public string? ActionUrl { get; set; }
+        public bool IsRead { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private List<NotificationDto> notifications = new();
+    private List<NotificationDto> filteredNotifications = new();
+    private string activeFilter = "all";
+    private bool isLoading = false;
+    private bool isRefreshing = false;
+    private int unreadCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadNotifications();
+    }
+
+    private async Task LoadNotifications()
+    {
+        if (isRefreshing) return;
+
+        isRefreshing = true;
+        isLoading = notifications.Count == 0;
+
+        try
+        {
+            // TODO: Load from API
+            // notifications = await ApiService.GetNotificationsAsync();
+
+            // Mock data
+            await Task.Delay(800);
+
+            notifications = new List<NotificationDto>
+            {
+                new NotificationDto
+                {
+                    Type = NotificationType.FriendRequest,
+                    Title = "New friend request",
+                    Message = "Alice Johnson wants to be your friend",
+                    ActionText = "View request",
+                    ActionUrl = "/friends",
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+                },
+                new NotificationDto
+                {
+                    Type = NotificationType.FriendAccepted,
+                    Title = "Friend request accepted",
+                    Message = "Bob Smith accepted your friend request",
+                    ActionText = "Send message",
+                    ActionUrl = "/chat/user2",
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow.AddHours(-1)
+                },
+                new NotificationDto
+                {
+                    Type = NotificationType.NewMessage,
+                    Title = "New message from Charlie",
+                    Message = "Hey! Are you free for a call?",
+                    ActionText = "Reply",
+                    ActionUrl = "/chat/user3",
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow.AddHours(-2)
+                },
+                new NotificationDto
+                {
+                    Type = NotificationType.RoomInvite,
+                    Title = "Room invitation",
+                    Message = "You've been invited to join 'Project Alpha' room",
+                    ActionText = "View room",
+                    ActionUrl = "/rooms",
+                    IsRead = true,
+                    CreatedAt = DateTime.UtcNow.AddHours(-5)
+                },
+                new NotificationDto
+                {
+                    Type = NotificationType.Mention,
+                    Title = "You were mentioned",
+                    Message = "David mentioned you in 'Design Team' room",
+                    ActionText = "View message",
+                    ActionUrl = "/room/room1",
+                    IsRead = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                },
+                new NotificationDto
+                {
+                    Type = NotificationType.System,
+                    Title = "System update",
+                    Message = "New features are now available! Check out video calling and screen sharing.",
+                    ActionText = null,
+                    ActionUrl = null,
+                    IsRead = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2)
+                }
+            };
+
+            UpdateUnreadCount();
+            FilterNotifications();
+        }
+        finally
+        {
+            isLoading = false;
+            isRefreshing = false;
+        }
+    }
+
+    private void SetFilter(string filter)
+    {
+        activeFilter = filter;
+        FilterNotifications();
+    }
+
+    private void FilterNotifications()
+    {
+        filteredNotifications = activeFilter switch
+        {
+            "unread" => notifications.Where(n => !n.IsRead).ToList(),
+            "friends" => notifications.Where(n =>
+                n.Type == NotificationType.FriendRequest ||
+                n.Type == NotificationType.FriendAccepted).ToList(),
+            "rooms" => notifications.Where(n =>
+                n.Type == NotificationType.RoomInvite).ToList(),
+            "mentions" => notifications.Where(n =>
+                n.Type == NotificationType.Mention).ToList(),
+            _ => notifications
+        };
+
+        StateHasChanged();
+    }
+
+    private void UpdateUnreadCount()
+    {
+        unreadCount = notifications.Count(n => !n.IsRead);
+    }
+
+    private async Task MarkAllAsRead()
+    {
+        // TODO: Call API to mark all as read
+        foreach (var notification in notifications)
+        {
+            notification.IsRead = true;
+        }
+
+        UpdateUnreadCount();
+        FilterNotifications();
+    }
+
+    private async Task HandleNotificationClick(NotificationDto notification)
+    {
+        if (!notification.IsRead)
+        {
+            notification.IsRead = true;
+            UpdateUnreadCount();
+            // TODO: Call API to mark as read
+        }
+
+        if (!string.IsNullOrEmpty(notification.ActionUrl))
+        {
+            Navigation.NavigateTo(notification.ActionUrl);
+        }
+    }
+
+    private void HandleAction(NotificationDto notification)
+    {
+        if (!string.IsNullOrEmpty(notification.ActionUrl))
+        {
+            Navigation.NavigateTo(notification.ActionUrl);
+        }
+    }
+
+    private async Task DismissNotification(string id)
+    {
+        // TODO: Call API to dismiss notification
+        notifications.RemoveAll(n => n.Id == id);
+        UpdateUnreadCount();
+        FilterNotifications();
+    }
+
+    private string GetNotificationIcon(NotificationType type)
+    {
+        return type switch
+        {
+            NotificationType.FriendRequest => "👋",
+            NotificationType.FriendAccepted => "✨",
+            NotificationType.NewMessage => "💬",
+            NotificationType.RoomInvite => "🏠",
+            NotificationType.Mention => "📢",
+            NotificationType.System => "⚙️",
+            _ => "🔔"
+        };
+    }
+
+    private string GetEmptyStateTitle()
+    {
+        return activeFilter switch
+        {
+            "unread" => "You're all caught up!",
+            "friends" => "No friend notifications",
+            "rooms" => "No room notifications",
+            "mentions" => "No mentions yet",
+            _ => "No notifications yet"
+        };
+    }
+
+    private string GetEmptyStateMessage()
+    {
+        return activeFilter switch
+        {
+            "unread" => "All your notifications have been read.",
+            "friends" => "You don't have any friend-related notifications.",
+            "rooms" => "You don't have any room-related notifications.",
+            "mentions" => "Nobody has mentioned you recently.",
+            _ => "You'll see notifications here when something happens."
+        };
+    }
+
+    private string GetTimeAgo(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM dd");
+    }
+}

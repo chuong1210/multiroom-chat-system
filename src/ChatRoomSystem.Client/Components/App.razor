@@ -1,6 +1,5 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,12 +10,16 @@
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet />
 </head>
-
 <body>
-    <Routes />
+    <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="webrtc.js"></script>
     <script src="whiteboard.js"></script>
 </body>
-
 </html>
+
+@code {
+    // Tắt prerender cho toàn bộ app
+    private static Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode InteractiveServer { get; } =
+        new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false);
+}

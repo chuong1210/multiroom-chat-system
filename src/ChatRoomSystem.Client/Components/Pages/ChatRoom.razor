@@ -6,15 +6,35 @@
 @inject WebSocketService WebSocketService
 @inject NavigationManager Navigation
 @implements IAsyncDisposable
-@rendermode InteractiveServer
+@* @rendermode InteractiveServer *@
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>@roomName - Chat Room</PageTitle>
 
-@if (AuthService.CurrentUser == null || room == null)
+@if (isInitializing)
 {
-    <div class="text-center py-5">
-        <div class="spinner-border"></div>
-        <p>Loading...</p>
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Đang khởi tạo...</span>
+        </div>
+    </div>
+    return;
+}
+
+@if (AuthService.CurrentUser == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <p>Đang chuyển hướng đến trang đăng nhập...</p>
+    </div>
+    return;
+}
+
+@if (room == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Đang tải phòng chat...</span>
+        </div>
     </div>
     return;
 }
@@ -98,14 +118,14 @@
         z-index: 10;
     }
 
-    .room-header .btn-link {
-        font-size: var(--font-size-lg);
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-primary);
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-xs);
-    }
+        .room-header .btn-link {
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
 
     .room-info h4 {
         margin: 0;
@@ -139,23 +159,23 @@
         background: linear-gradient(to bottom, #f9fafb 0%, #ffffff 100%);
     }
 
-    .messages-container::-webkit-scrollbar {
-        width: 8px;
-    }
+        .messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
 
-    .messages-container::-webkit-scrollbar-track {
-        background: var(--color-gray-100);
-        border-radius: var(--radius-full);
-    }
+        .messages-container::-webkit-scrollbar-track {
+            background: var(--color-gray-100);
+            border-radius: var(--radius-full);
+        }
 
-    .messages-container::-webkit-scrollbar-thumb {
-        background: var(--color-gray-400);
-        border-radius: var(--radius-full);
-    }
+        .messages-container::-webkit-scrollbar-thumb {
+            background: var(--color-gray-400);
+            border-radius: var(--radius-full);
+        }
 
-    .messages-container::-webkit-scrollbar-thumb:hover {
-        background: var(--color-gray-500);
-    }
+            .messages-container::-webkit-scrollbar-thumb:hover {
+                background: var(--color-gray-500);
+            }
 
     .message {
         margin-bottom: var(--spacing-lg);
@@ -178,16 +198,16 @@
         padding: 0 var(--spacing-sm);
     }
 
-    .message-header strong {
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-gray-700);
-        font-size: var(--font-size-sm);
-    }
+        .message-header strong {
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-gray-700);
+            font-size: var(--font-size-sm);
+        }
 
-    .message-header small {
-        color: var(--color-gray-400);
-        font-size: var(--font-size-xs);
-    }
+        .message-header small {
+            color: var(--color-gray-400);
+            font-size: var(--font-size-xs);
+        }
 
     .message-content {
         padding: var(--spacing-md) var(--spacing-lg);
@@ -228,26 +248,48 @@
         box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
     }
 
-    .message-input-container input {
-        flex: 1;
-        font-size: var(--font-size-lg);
-        padding: var(--spacing-md) var(--spacing-lg);
-        border-radius: var(--radius-full);
-        border: 2px solid var(--color-gray-300);
-        transition: all var(--transition-fast);
+        .message-input-container input {
+            flex: 1;
+            font-size: var(--font-size-lg);
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-radius: var(--radius-full);
+            border: 2px solid var(--color-gray-300);
+            transition: all var(--transition-fast);
+        }
+
+            .message-input-container input:focus {
+                border-color: var(--color-primary);
+                box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+            }
+
+        .message-input-container .btn {
+            padding: var(--spacing-md) var(--spacing-2xl);
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            border-radius: var(--radius-full);
+            box-shadow: var(--shadow-md);
+        }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
-    .message-input-container input:focus {
-        border-color: var(--color-primary);
-        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
-    }
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
 
-    .message-input-container .btn {
-        padding: var(--spacing-md) var(--spacing-2xl);
-        font-size: var(--font-size-lg);
-        font-weight: var(--font-weight-semibold);
-        border-radius: var(--radius-full);
-        box-shadow: var(--shadow-md);
+        to {
+            opacity: 1;
+        }
     }
 
     @@media (max-width: 768px) {
@@ -284,52 +326,88 @@
     private string messageText = "";
     private string roomName = "Chat Room";
     private bool isConnected = false;
+    private bool isInitializing = true; // ✅ Flag để track initialization
     private ElementReference messagesContainer;
     private System.Timers.Timer? typingTimer;
 
     protected override async Task OnInitializedAsync()
     {
-        await AuthService.InitializeAsync();
+        Console.WriteLine($"🔵 [Room] OnInitializedAsync START - RoomId: {RoomId}");
 
-        if (!AuthService.IsAuthenticated)
+        try
         {
-            Navigation.NavigateTo("/login");
-            return;
+            // ✅ Initialize auth
+            await AuthService.InitializeAsync();
+
+            Console.WriteLine($"🔵 [Room] Auth initialized");
+            Console.WriteLine($"🔵 [Room] IsAuthenticated: {AuthService.IsAuthenticated}");
+            Console.WriteLine($"🔵 [Room] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
+
+            // ✅ Đợi state ổn định
+            await Task.Delay(100);
+
+            if (!AuthService.IsAuthenticated)
+            {
+                Console.WriteLine("🔴 [Room] Not authenticated, redirecting to /login");
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            Console.WriteLine($"🟢 [Room] Loading room data for RoomId: {RoomId}");
+
+            // ✅ Load room info
+            room = await ApiService.GetRoomAsync(RoomId);
+
+            if (room == null)
+            {
+                Console.WriteLine($"🔴 [Room] Room not found: {RoomId}");
+                Navigation.NavigateTo("/rooms");
+                return;
+            }
+
+            Console.WriteLine($"🟢 [Room] Room loaded: {room.Name}");
+            roomName = room.Name;
+
+            // ✅ Load message history
+            var messagePage = await ApiService.GetRoomMessagesAsync(RoomId);
+            if (messagePage != null)
+            {
+                messages = messagePage.Messages;
+                Console.WriteLine($"🟢 [Room] Loaded {messages.Count} messages");
+            }
+
+            // ✅ Connect WebSocket
+            await ConnectWebSocket();
+
+            // ✅ Subscribe to WebSocket events
+            WebSocketService.OnMessageReceived += HandleMessageReceived;
+            WebSocketService.OnUserJoinedRoom += HandleUserJoinedRoom;
+            WebSocketService.OnUserLeftRoom += HandleUserLeftRoom;
+            WebSocketService.OnUserTyping += HandleUserTyping;
+            WebSocketService.OnUserStoppedTyping += HandleUserStoppedTyping;
+            WebSocketService.OnConnected += HandleConnected;
+            WebSocketService.OnDisconnected += HandleDisconnected;
+
+            // ✅ Join room via WebSocket
+            if (isConnected)
+            {
+                await WebSocketService.JoinRoomAsync(RoomId);
+                Console.WriteLine($"🟢 [Room] Joined room via WebSocket");
+            }
+
+            Console.WriteLine("🟢 [Room] Initialization completed successfully");
         }
-
-        // Load room info
-        room = await ApiService.GetRoomAsync(RoomId);
-        if (room == null)
+        catch (Exception ex)
         {
-            Navigation.NavigateTo("/rooms");
-            return;
+            Console.WriteLine($"🔴 [Room] Error in OnInitializedAsync: {ex.Message}");
+            Console.WriteLine($"🔴 [Room] Stack trace: {ex.StackTrace}");
         }
-
-        roomName = room.Name;
-
-        // Load message history
-        var messagePage = await ApiService.GetRoomMessagesAsync(RoomId);
-        if (messagePage != null)
+        finally
         {
-            messages = messagePage.Messages;
-        }
-
-        // Connect WebSocket
-        await ConnectWebSocket();
-
-        // Subscribe to WebSocket events
-        WebSocketService.OnMessageReceived += HandleMessageReceived;
-        WebSocketService.OnUserJoinedRoom += HandleUserJoinedRoom;
-        WebSocketService.OnUserLeftRoom += HandleUserLeftRoom;
-        WebSocketService.OnUserTyping += HandleUserTyping;
-        WebSocketService.OnUserStoppedTyping += HandleUserStoppedTyping;
-        WebSocketService.OnConnected += HandleConnected;
-        WebSocketService.OnDisconnected += HandleDisconnected;
-
-        // Join room via WebSocket
-        if (isConnected)
-        {
-            await WebSocketService.JoinRoomAsync(RoomId);
+            // ✅ Kết thúc initialization
+            isInitializing = false;
+            StateHasChanged();
+            Console.WriteLine("🔵 [Room] OnInitializedAsync END");
         }
     }
 
@@ -337,21 +415,29 @@
     {
         try
         {
+            Console.WriteLine("🔵 [Room] Connecting WebSocket...");
             var token = await AuthService.GetTokenAsync();
+
             if (!string.IsNullOrEmpty(token))
             {
                 await WebSocketService.ConnectAsync(token);
                 isConnected = WebSocketService.IsConnected;
+                Console.WriteLine($"🟢 [Room] WebSocket connected: {isConnected}");
+            }
+            else
+            {
+                Console.WriteLine("🔴 [Room] No token available for WebSocket");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WebSocket connection error: {ex.Message}");
+            Console.WriteLine($"🔴 [Room] WebSocket connection error: {ex.Message}");
         }
     }
 
     private void HandleConnected()
     {
+        Console.WriteLine("🟢 [Room] WebSocket connected event");
         isConnected = true;
         InvokeAsync(async () =>
         {
@@ -362,6 +448,7 @@
 
     private void HandleDisconnected(string reason)
     {
+        Console.WriteLine($"🔴 [Room] WebSocket disconnected: {reason}");
         isConnected = false;
         InvokeAsync(StateHasChanged);
     }
@@ -370,6 +457,7 @@
     {
         if (message.RoomId == RoomId)
         {
+            Console.WriteLine($"🟢 [Room] Message received from {message.SenderUsername}");
             InvokeAsync(() =>
             {
                 messages.Add(message);
@@ -383,7 +471,7 @@
     {
         if (roomId == RoomId)
         {
-            // Show system message (optional)
+            Console.WriteLine($"🟢 [Room] User joined: {username}");
             InvokeAsync(StateHasChanged);
         }
     }
@@ -392,6 +480,7 @@
     {
         if (roomId == RoomId)
         {
+            Console.WriteLine($"🟡 [Room] User left: {username}");
             InvokeAsync(StateHasChanged);
         }
     }
@@ -427,6 +516,7 @@
             return;
         }
 
+        Console.WriteLine($"🔵 [Room] Sending message: {messageText}");
         await WebSocketService.SendChatMessageAsync(RoomId, messageText.Trim());
         messageText = "";
         await WebSocketService.SendTypingAsync(RoomId, false);
@@ -468,26 +558,39 @@
 
     private void BackToRooms()
     {
+        Console.WriteLine("🔵 [Room] Navigating back to /rooms");
         Navigation.NavigateTo("/rooms");
     }
 
     public async ValueTask DisposeAsync()
     {
-        // Unsubscribe events
-        WebSocketService.OnMessageReceived -= HandleMessageReceived;
-        WebSocketService.OnUserJoinedRoom -= HandleUserJoinedRoom;
-        WebSocketService.OnUserLeftRoom -= HandleUserLeftRoom;
-        WebSocketService.OnUserTyping -= HandleUserTyping;
-        WebSocketService.OnUserStoppedTyping -= HandleUserStoppedTyping;
-        WebSocketService.OnConnected -= HandleConnected;
-        WebSocketService.OnDisconnected -= HandleDisconnected;
+        Console.WriteLine($"🔵 [Room] Disposing - RoomId: {RoomId}");
 
-        // Leave room
-        if (isConnected)
+        try
         {
-            await WebSocketService.LeaveRoomAsync(RoomId);
-        }
+            // Unsubscribe events
+            WebSocketService.OnMessageReceived -= HandleMessageReceived;
+            WebSocketService.OnUserJoinedRoom -= HandleUserJoinedRoom;
+            WebSocketService.OnUserLeftRoom -= HandleUserLeftRoom;
+            WebSocketService.OnUserTyping -= HandleUserTyping;
+            WebSocketService.OnUserStoppedTyping -= HandleUserStoppedTyping;
+            WebSocketService.OnConnected -= HandleConnected;
+            WebSocketService.OnDisconnected -= HandleDisconnected;
 
-        typingTimer?.Dispose();
+            // Leave room
+            if (isConnected)
+            {
+                await WebSocketService.LeaveRoomAsync(RoomId);
+                Console.WriteLine($"🟢 [Room] Left room via WebSocket");
+            }
+
+            typingTimer?.Dispose();
+
+            Console.WriteLine("🟢 [Room] Disposed successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Room] Error during disposal: {ex.Message}");
+        }
     }
 }

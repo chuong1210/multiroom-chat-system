@@ -1,0 +1,738 @@
+﻿@page "/chat/{UserId}"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject ApiService ApiService
+@inject WebSocketService WebSocketService
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
+
+<PageTitle>Chat with @friendName - Chat Room System</PageTitle>
+
+<div class="chat-container">
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner-border"></div>
+            <p>Loading chat...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Chat Header -->
+        <div class="chat-header">
+            <button class="btn-back" @onclick="BackToMessages">
+                <span>←</span>
+            </button>
+            <div class="chat-user-info">
+                <div class="chat-avatar">
+                    @GetInitials(friendName)
+                    @if (isOnline)
+                    {
+                        <span class="status-dot online"></span>
+                    }
+                </div>
+                <div class="user-details">
+                    <h3>@friendName</h3>
+                    <p class="status-text">
+                        @if (isTyping)
+                        {
+                            <span class="typing-text">
+                                typing
+                                <span class="typing-dots">
+                                    <span></span><span></span><span></span>
+                                </span>
+                            </span>
+                        }
+                        else if (isOnline)
+                        {
+                            <span class="online-text">● Active now</span>
+                        }
+                        else
+                        {
+                            <span class="offline-text">○ Last seen @GetRelativeTime(lastSeen)</span>
+                        }
+                    </p>
+                </div>
+            </div>
+            <div class="chat-actions">
+                <button class="btn-icon" title="Video call">
+                    <span>📹</span>
+                </button>
+                <button class="btn-icon" title="Voice call">
+                    <span>📞</span>
+                </button>
+                <button class="btn-icon" title="More options">
+                    <span>⋮</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages Area -->
+        <div class="messages-area" @ref="messagesContainer">
+            <div class="messages-wrapper">
+                @if (messages.Count == 0)
+                {
+                    <div class="no-messages">
+                        <div class="no-messages-icon">👋</div>
+                        <h3>Start the conversation!</h3>
+                        <p>Send a message to @friendName</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var message in messages)
+                    {
+                        var isOwn = message.SenderId == AuthService.CurrentUser?.Id;
+                        <div class="message-group @(isOwn ? "own" : "other")">
+                            @if (!isOwn)
+                            {
+                                <div class="message-avatar">
+                                    @GetInitials(message.SenderUsername)
+                                </div>
+                            }
+                            <div class="message-bubble">
+                                <p class="message-text">@message.Content</p>
+                                <span class="message-time">
+                                    @message.Timestamp.ToLocalTime().ToString("HH:mm")
+                                </span>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <!-- Input Area -->
+        <div class="input-area">
+            <button class="btn-icon" title="Attach file">
+                <span>📎</span>
+            </button>
+            <button class="btn-icon" title="Add emoji">
+                <span>😊</span>
+            </button>
+            <div class="input-wrapper">
+                <textarea class="message-input"
+                          placeholder="Type a message..."
+                          @bind="messageText"
+                          @bind:event="oninput"
+                          @onkeydown="HandleKeyDown"
+                          rows="1"></textarea>
+            </div>
+            <button class="btn-send @(CanSend ? "active" : "")"
+                    @onclick="SendMessage"
+                    disabled="@(!CanSend)">
+                <span>📤</span>
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: linear-gradient(to bottom, #f9fafb, #ffffff);
+    }
+
+    /* Loading State */
+    .loading-state {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    /* Chat Header */
+    .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem 2rem;
+        background: white;
+        border-bottom: 2px solid #e5e7eb;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        z-index: 10;
+    }
+
+    .btn-back {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-size: 1.5rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .btn-back:hover {
+        background: #e5e7eb;
+        color: #1f2937;
+        transform: translateX(-4px);
+    }
+
+    .chat-user-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .chat-avatar {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .status-dot {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 3px solid white;
+        background: #9ca3af;
+    }
+
+    .status-dot.online {
+        background: #10b981;
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+    }
+
+    .user-details h3 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .status-text {
+        margin: 0.25rem 0 0 0;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .online-text {
+        color: #10b981;
+        font-weight: 500;
+    }
+
+    .offline-text {
+        color: #9ca3af;
+    }
+
+    .typing-text {
+        color: #6366f1;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .typing-dots {
+        display: inline-flex;
+        gap: 3px;
+    }
+
+    .typing-dots span {
+        width: 4px;
+        height: 4px;
+        background: #6366f1;
+        border-radius: 50%;
+        animation: typing 1.4s infinite;
+    }
+
+    .typing-dots span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .typing-dots span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @@keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+        }
+        30% {
+            transform: translateY(-6px);
+        }
+    }
+
+    .chat-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: #f3f4f6;
+        font-size: 1.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+        background: #e5e7eb;
+        transform: scale(1.1);
+    }
+
+    /* Messages Area */
+    .messages-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 2rem;
+        background: linear-gradient(to bottom, #f9fafb 0%, #ffffff 100%);
+    }
+
+    .messages-area::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .messages-area::-webkit-scrollbar-track {
+        background: #f3f4f6;
+        border-radius: 4px;
+    }
+
+    .messages-area::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 4px;
+    }
+
+    .messages-area::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+    }
+
+    .messages-wrapper {
+        max-width: 900px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    /* No Messages State */
+    .no-messages {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .no-messages-icon {
+        font-size: 5rem;
+        margin-bottom: 1.5rem;
+        animation: wave 2s ease-in-out infinite;
+    }
+
+    @@keyframes wave {
+        0%, 100% {
+            transform: rotate(0deg);
+        }
+        25% {
+            transform: rotate(20deg);
+        }
+        75% {
+            transform: rotate(-20deg);
+        }
+    }
+
+    .no-messages h3 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+    }
+
+    .no-messages p {
+        color: #6b7280;
+        font-size: 1rem;
+    }
+
+    /* Messages */
+    .message-group {
+        display: flex;
+        gap: 0.75rem;
+        animation: slideUp 0.3s ease-out;
+    }
+
+    .message-group.own {
+        flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+        align-self: flex-end;
+    }
+
+    .message-bubble {
+        max-width: 60%;
+        padding: 0.875rem 1.25rem;
+        border-radius: 20px;
+        position: relative;
+        animation: messageIn 0.3s ease-out;
+    }
+
+    .message-group.own .message-bubble {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        border-bottom-right-radius: 6px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .message-group.other .message-bubble {
+        background: white;
+        color: #1f2937;
+        border-bottom-left-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .message-text {
+        margin: 0;
+        line-height: 1.6;
+        word-wrap: break-word;
+        font-size: 0.95rem;
+    }
+
+    .message-time {
+        display: block;
+        font-size: 0.75rem;
+        margin-top: 0.5rem;
+        opacity: 0.7;
+    }
+
+    @@keyframes messageIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Input Area */
+    .input-area {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.75rem;
+        padding: 1.25rem 2rem;
+        background: white;
+        border-top: 2px solid #e5e7eb;
+        box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .input-wrapper {
+        flex: 1;
+        position: relative;
+    }
+
+    .message-input {
+        width: 100%;
+        padding: 0.875rem 1.25rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 24px;
+        font-size: 1rem;
+        font-family: inherit;
+        resize: none;
+        max-height: 120px;
+        transition: all 0.2s;
+        background: #f9fafb;
+    }
+
+    .message-input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        background: white;
+    }
+
+    .btn-send {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: none;
+        background: #e5e7eb;
+        color: #9ca3af;
+        font-size: 1.5rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+
+    .btn-send.active {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-send.active:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-send:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .chat-header {
+            padding: 1rem;
+        }
+
+        .messages-area {
+            padding: 1rem;
+        }
+
+        .input-area {
+            padding: 1rem;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+        }
+
+        .chat-actions {
+            display: none;
+        }
+    }
+</style>
+@code {
+    [Parameter]
+    public string UserId { get; set; } = "";
+
+    private List<MessageDto> messages = new();
+    private string messageText = "";
+    private string friendName = "";
+    private bool isOnline = false;
+    private bool isTyping = false;
+    private bool isLoading = true;
+    private DateTime lastSeen = DateTime.UtcNow;
+    private ElementReference messagesContainer;
+    private System.Timers.Timer? typingTimer;
+    private bool CanSend => !string.IsNullOrWhiteSpace(messageText);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadChat();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Setup input event listener for typing indicator
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadChat()
+    {
+        isLoading = true;
+        try
+        {
+            // TODO: Load friend info and messages from API
+            await Task.Delay(500);
+            friendName = "Alice Johnson";
+            isOnline = true;
+
+            // Mock messages
+            messages = new List<MessageDto>
+            {
+                new MessageDto
+                {
+                    Id = "1",
+                    SenderId = UserId,
+                    SenderUsername = friendName,
+                    Content = "Hey! How are you?",
+                    Timestamp = DateTime.UtcNow.AddHours(-2)
+                },
+                new MessageDto
+                {
+                    Id = "2",
+                    SenderId = AuthService.CurrentUser!.Id,
+                    SenderUsername = AuthService.CurrentUser.Username,
+                    Content = "I'm good! Thanks for asking 😊",
+                    Timestamp = DateTime.UtcNow.AddHours(-2).AddMinutes(5)
+                },
+                new MessageDto
+                {
+                    Id = "3",
+                    SenderId = UserId,
+                    SenderUsername = friendName,
+                    Content = "Are you free this weekend?",
+                    Timestamp = DateTime.UtcNow.AddHours(-1)
+                }
+            };
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (!CanSend)
+            return;
+
+        var content = messageText.Trim();
+        messageText = "";
+
+        // Stop typing indicator
+        StopTypingIndicator();
+
+        // TODO: Send via WebSocket or API
+        var newMessage = new MessageDto
+        {
+            Id = Guid.NewGuid().ToString(),
+            SenderId = AuthService.CurrentUser!.Id,
+            SenderUsername = AuthService.CurrentUser.Username,
+            Content = content,
+            Timestamp = DateTime.UtcNow
+        };
+
+        messages.Add(newMessage);
+        StateHasChanged();
+
+        // Scroll to bottom
+        await Task.Delay(50);
+        // await ScrollToBottom();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            // Prevent default new line
+            await SendMessage();
+        }
+        else
+        {
+            // Start typing indicator when user types
+            StartTypingIndicator();
+        }
+    }
+
+    private void StartTypingIndicator()
+    {
+        // TODO: Send typing indicator via WebSocket
+        // await WebSocketService.SendTypingAsync(UserId, true);
+
+        // Reset timer
+        typingTimer?.Stop();
+        typingTimer = new System.Timers.Timer(2000);
+        typingTimer.Elapsed += (sender, e) =>
+        {
+            StopTypingIndicator();
+        };
+        typingTimer.Start();
+    }
+
+    private void StopTypingIndicator()
+    {
+        // TODO: Stop typing indicator via WebSocket
+        // await WebSocketService.SendTypingAsync(UserId, false);
+
+        typingTimer?.Stop();
+        typingTimer?.Dispose();
+        typingTimer = null;
+    }
+
+    private void BackToMessages()
+    {
+        Navigation.NavigateTo("/messages");
+    }
+
+    private string GetInitials(string? username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return "?";
+
+        var parts = username.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return username.Length >= 2
+            ? username.Substring(0, 2).ToUpper()
+            : username[0].ToString().ToUpper();
+    }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes} minutes ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours} hours ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays} days ago";
+
+        return dateTime.ToString("MMM dd");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        StopTypingIndicator();
+    }
+}

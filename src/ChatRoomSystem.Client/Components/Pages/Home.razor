@@ -2,7 +2,8 @@
 @using ChatRoomSystem.Client.Services
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@rendermode InteractiveServer
+@* @rendermode InteractiveServer *@
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>Chat Room System</PageTitle>
 
@@ -16,14 +17,17 @@
     protected override async Task OnInitializedAsync()
     {
         await AuthService.InitializeAsync();
-
+        
+        // ✅ Đợi một chút để đảm bảo state đã được set
+        await Task.Delay(100);
+        
         if (AuthService.IsAuthenticated)
         {
-            Navigation.NavigateTo("/rooms", forceLoad: true);
+            Navigation.NavigateTo("/rooms"); // ❌ Bỏ forceLoad: true
         }
         else
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo("/login"); // ❌ Bỏ forceLoad: true
         }
     }
 }

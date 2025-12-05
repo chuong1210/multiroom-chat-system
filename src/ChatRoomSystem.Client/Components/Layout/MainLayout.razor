@@ -1,19 +1,90 @@
 ﻿@inherits LayoutComponentBase
+@using ChatRoomSystem.Client.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="app-container">
+    <!-- ✅ DEBUG: Hiện thông tin debug -->
+    @* <div style="position: fixed; top: 10px; right: 10px; background: black; color: lime; padding: 10px; z-index: 9999; font-family: monospace; font-size: 12px;">
+        <div>🔍 DEBUG INFO:</div>
+        <div>IsInitialized: @isInitialized</div>
+        <div>IsAuthenticated: @AuthService.IsAuthenticated</div>
+        <div>CurrentUser: @(AuthService.CurrentUser?.Username ?? "NULL")</div>
+        <div>Show Sidebar: @(isInitialized && AuthService.IsAuthenticated)</div>
+    </div> *@
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+    @if (isInitialized && AuthService.IsAuthenticated)
+    {
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>💬 ChatRoom</h3>
+                <div class="user-info">
+                    <div class="avatar">@GetInitials(AuthService.CurrentUser?.Username)</div>
+                    <div class="user-details">
+                        <strong>@AuthService.CurrentUser?.Username</strong>
+                        <span class="status online">● Online</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <NavLink class="nav-item" href="/rooms" Match="NavLinkMatch.All">
+                    <span class="icon">🏠</span>
+                    <span class="text">Rooms</span>
+                </NavLink>
+
+                <NavLink class="nav-item" href="/messages">
+                    <span class="icon">💬</span>
+                    <span class="text">Messages</span>
+                    @if (unreadMessagesCount > 0)
+                    {
+                        <span class="badge">@unreadMessagesCount</span>
+                    }
+                </NavLink>
+
+                <NavLink class="nav-item" href="/friends">
+                    <span class="icon">👥</span>
+                    <span class="text">Friends</span>
+                    @if (friendRequestsCount > 0)
+                    {
+                        <span class="badge">@friendRequestsCount</span>
+                    }
+                </NavLink>
+
+                <NavLink class="nav-item" href="/notifications">
+                    <span class="icon">🔔</span>
+                    <span class="text">Notifications</span>
+                    @if (notificationsCount > 0)
+                    {
+                        <span class="badge">@notificationsCount</span>
+                    }
+                </NavLink>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn btn-logout" @onclick="HandleLogout">
+                    <span class="icon">🚪</span>
+                    <span class="text">Logout</span>
+                </button>
+            </div>
         </div>
 
-        <article class="content px-4">
+        <!-- Main Content -->
+        <main class="main-content">
             @Body
-        </article>
-    </main>
+        </main>
+    }
+    else
+    {
+        <!-- No sidebar when not authenticated -->
+        <main class="main-content-full">
+            <div style="padding: 20px; background: yellow; color: black;">
+                ⚠️ SIDEBAR HIDDEN - isInitialized: @isInitialized, IsAuthenticated: @AuthService.IsAuthenticated
+            </div>
+            @Body
+        </main>
+    }
 </div>
 
 <div id="blazor-error-ui">
@@ -21,3 +92,338 @@
     <a href="" class="reload">Reload</a>
     <a class="dismiss">🗙</a>
 </div>
+
+<!-- CSS giữ nguyên -->
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    .app-container {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        background: #f5f7fa;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+        width: 280px;
+        background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+        z-index: 100;
+    }
+
+    .sidebar-header {
+        padding: 2rem 1.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+        .sidebar-header h3 {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: white;
+        color: #6366f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .user-details {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+        .user-details strong {
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+    .status {
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+        .status.online {
+            color: #10b981;
+        }
+
+    /* ===== NAVIGATION ===== */
+    .sidebar-nav {
+        flex: 1;
+        padding: 1rem 0;
+        overflow-y: auto;
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.2s ease;
+        position: relative;
+        font-weight: 500;
+        font-size: 1rem;
+    }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-left: 4px solid white;
+        }
+
+        .nav-item .icon {
+            font-size: 1.5rem;
+            width: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-item .text {
+            flex: 1;
+        }
+
+        .nav-item .badge {
+            background: #ef4444;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            min-width: 24px;
+            text-align: center;
+        }
+
+    /* ===== SIDEBAR FOOTER ===== */
+    .sidebar-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-logout {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.875rem 1.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+        .btn-logout:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn-logout .icon {
+            font-size: 1.5rem;
+        }
+
+    /* ===== MAIN CONTENT ===== */
+    .main-content {
+        flex: 1;
+        overflow-y: auto;
+        background: #f5f7fa;
+    }
+
+    .main-content-full {
+        flex: 1;
+        overflow-y: auto;
+        background: #f5f7fa;
+    }
+
+    /* ===== ERROR UI ===== */
+    #blazor-error-ui {
+        background: #ef4444;
+        color: white;
+        padding: 1rem;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        display: none;
+    }
+
+        #blazor-error-ui .reload,
+        #blazor-error-ui .dismiss {
+            color: white;
+            margin-left: 1rem;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+    /* ===== RESPONSIVE ===== */
+    @@media (max-width: 768px) {
+        .sidebar {
+            width: 80px;
+        }
+
+        .sidebar-header h3,
+        .user-details,
+        .nav-item .text,
+        .btn-logout .text {
+            display: none;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+        }
+
+        .user-info {
+            justify-content: center;
+        }
+
+        .nav-item {
+            justify-content: center;
+            padding: 1rem;
+        }
+
+            .nav-item .badge {
+                position: absolute;
+                top: 0.5rem;
+                right: 0.5rem;
+            }
+
+        .btn-logout {
+            justify-content: center;
+        }
+    }
+</style>
+
+@code {
+    private int unreadMessagesCount = 0;
+    private int friendRequestsCount = 0;
+    private int notificationsCount = 0;
+    private bool isInitialized = false;
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine("🔵 [MainLayout] OnInitialized START");
+        Console.WriteLine($"🔵 [MainLayout] IsAuthenticated: {AuthService.IsAuthenticated}");
+        Console.WriteLine($"🔵 [MainLayout] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
+
+        // Subscribe to auth state changes
+        AuthService.OnAuthStateChanged += OnAuthStateChanged;
+
+        Console.WriteLine("🔵 [MainLayout] OnInitialized END");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Console.WriteLine("🔵 [MainLayout] OnAfterRenderAsync - firstRender");
+
+            // Initialize auth state after first render (when JS interop is available)
+            await AuthService.InitializeAsync();
+
+            Console.WriteLine($"🔵 [MainLayout] After InitializeAsync - IsAuthenticated: {AuthService.IsAuthenticated}");
+            Console.WriteLine($"🔵 [MainLayout] After InitializeAsync - CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
+
+            if (AuthService.IsAuthenticated)
+            {
+                Console.WriteLine("🟢 [MainLayout] Loading counts...");
+                await LoadCounts();
+            }
+
+            isInitialized = true;
+            Console.WriteLine($"🟢 [MainLayout] isInitialized set to true");
+            StateHasChanged();
+        }
+    }
+
+    private void OnAuthStateChanged()
+    {
+        Console.WriteLine($"🟡 [MainLayout] OnAuthStateChanged triggered");
+        Console.WriteLine($"🟡 [MainLayout] IsAuthenticated: {AuthService.IsAuthenticated}");
+        Console.WriteLine($"🟡 [MainLayout] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
+
+        InvokeAsync(async () =>
+        {
+            if (AuthService.IsAuthenticated)
+            {
+                await LoadCounts();
+            }
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadCounts()
+    {
+        Console.WriteLine("🔵 [MainLayout] LoadCounts called");
+        // TODO: Load actual counts from API
+        await Task.Delay(100);
+        Console.WriteLine("🟢 [MainLayout] Counts loaded");
+    }
+
+    private async Task HandleLogout()
+    {
+        Console.WriteLine("🔵 [MainLayout] Logging out...");
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private string GetInitials(string? username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return "?";
+
+        var parts = username.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return username.Length >= 2
+            ? username.Substring(0, 2).ToUpper()
+            : username[0].ToString().ToUpper();
+    }
+
+    public void Dispose()
+    {
+        Console.WriteLine("🔵 [MainLayout] Disposing...");
+        AuthService.OnAuthStateChanged -= OnAuthStateChanged;
+    }
+}

@@ -3,7 +3,9 @@
 @using ChatRoomSystem.Client.Services
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@rendermode InteractiveServer
+@* @rendermode InteractiveServer *@
+
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>Đăng nhập - Chat Room System</PageTitle>
 
@@ -89,20 +91,25 @@
         overflow: hidden;
     }
 
-    .login-container::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        animation: pulse 15s ease-in-out infinite;
-    }
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 15s ease-in-out infinite;
+        }
 
     @@keyframes pulse {
-        0%, 100% { transform: translate(0, 0) scale(1); }
-        50% { transform: translate(-10%, -10%) scale(1.1); }
+        0%, 100% {
+            transform: translate(0, 0) scale(1);
+        }
+
+        50% {
+            transform: translate(-10%, -10%) scale(1.1);
+        }
     }
 
     .login-card {
@@ -117,56 +124,56 @@
         animation: slideUp 0.5s ease-out;
     }
 
-    .login-card h2 {
-        font-size: var(--font-size-3xl);
-        font-weight: var(--font-weight-bold);
-        color: var(--color-gray-900);
-        margin-bottom: var(--spacing-xl);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--spacing-sm);
-    }
+        .login-card h2 {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--color-gray-900);
+            margin-bottom: var(--spacing-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+        }
 
-    .login-card h2::before {
-        content: '💬';
-        font-size: 2rem;
-    }
+            .login-card h2::before {
+                content: '💬';
+                font-size: 2rem;
+            }
 
     .form-group-animated {
         position: relative;
         margin-bottom: var(--spacing-lg);
     }
 
-    .form-group-animated .form-label {
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-gray-700);
-        margin-bottom: var(--spacing-sm);
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-xs);
-    }
+        .form-group-animated .form-label {
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-gray-700);
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
 
-    .form-group-animated .form-control {
-        transition: all var(--transition-base);
-    }
+        .form-group-animated .form-control {
+            transition: all var(--transition-base);
+        }
 
-    .form-group-animated .form-control:focus {
-        transform: translateY(-2px);
-        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), var(--shadow-md);
-    }
+            .form-group-animated .form-control:focus {
+                transform: translateY(-2px);
+                box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), var(--shadow-md);
+            }
 
     .submit-btn-wrapper {
         margin-top: var(--spacing-xl);
     }
 
-    .submit-btn-wrapper .btn {
-        width: 100%;
-        padding: 0.875rem 1.5rem;
-        font-size: var(--font-size-lg);
-        font-weight: var(--font-weight-semibold);
-        box-shadow: var(--shadow-md);
-    }
+        .submit-btn-wrapper .btn {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            box-shadow: var(--shadow-md);
+        }
 
     .divider {
         display: flex;
@@ -177,34 +184,34 @@
         font-size: var(--font-size-sm);
     }
 
-    .divider::before,
-    .divider::after {
-        content: '';
-        flex: 1;
-        border-bottom: 1px solid var(--color-gray-300);
-    }
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--color-gray-300);
+        }
 
-    .divider span {
-        padding: 0 var(--spacing-md);
-    }
+        .divider span {
+            padding: 0 var(--spacing-md);
+        }
 
     .toggle-mode-btn {
         text-align: center;
         margin-top: var(--spacing-lg);
     }
 
-    .toggle-mode-btn .btn-link {
-        font-size: var(--font-size-base);
-        font-weight: var(--font-weight-medium);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-lg);
-        transition: all var(--transition-base);
-    }
+        .toggle-mode-btn .btn-link {
+            font-size: var(--font-size-base);
+            font-weight: var(--font-weight-medium);
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-radius: var(--radius-lg);
+            transition: all var(--transition-base);
+        }
 
-    .toggle-mode-btn .btn-link:hover {
-        background: var(--color-gray-100);
-        transform: none;
-    }
+            .toggle-mode-btn .btn-link:hover {
+                background: var(--color-gray-100);
+                transform: none;
+            }
 
     .alert {
         animation: slideDown 0.3s ease-out;
@@ -215,12 +222,11 @@
             padding: var(--spacing-xl);
         }
 
-        .login-card h2 {
-            font-size: var(--font-size-2xl);
-        }
+            .login-card h2 {
+                font-size: var(--font-size-2xl);
+            }
     }
 </style>
-
 @code {
     private LoginDto loginModel = new();
     private RegisterDto registerModel = new();
@@ -234,7 +240,7 @@
         // Check if already logged in
         if (AuthService.IsAuthenticated)
         {
-            Navigation.NavigateTo("/rooms", forceLoad: true);
+            Navigation.NavigateTo("/rooms"); // ✅ BỎ forceLoad: true
         }
     }
 
@@ -255,16 +261,21 @@
         {
             if (isLoginMode)
             {
+                Console.WriteLine("🔵 [Login] Starting login...");
                 var (success, message) = await AuthService.LoginAsync(loginModel);
+
                 if (success)
                 {
                     successMessage = message;
-                    await Task.Delay(500);
-                    Navigation.NavigateTo("/rooms", forceLoad: true);
+                    Console.WriteLine($"🟢 [Login] Login successful - User: {AuthService.CurrentUser?.Username}");
+
+                    await Task.Delay(200); // Đợi state update
+                    Navigation.NavigateTo("/rooms"); // ✅ BỎ forceLoad: true
                 }
                 else
                 {
                     errorMessage = message;
+                    Console.WriteLine($"🔴 [Login] Login failed: {message}");
                 }
             }
             else
@@ -272,18 +283,28 @@
                 registerModel.Email = loginModel.Email;
                 registerModel.Password = loginModel.Password;
 
+                Console.WriteLine("🔵 [Login] Starting register...");
                 var (success, message) = await AuthService.RegisterAsync(registerModel);
+
                 if (success)
                 {
                     successMessage = message;
-                    await Task.Delay(500);
-                    Navigation.NavigateTo("/rooms", forceLoad: true);
+                    Console.WriteLine($"🟢 [Login] Register successful");
+
+                    await Task.Delay(200); // Đợi state update
+                    Navigation.NavigateTo("/rooms"); // ✅ BỎ forceLoad: true
                 }
                 else
                 {
                     errorMessage = message;
+                    Console.WriteLine($"🔴 [Login] Register failed: {message}");
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Login] Exception: {ex.Message}");
+            errorMessage = $"Lỗi: {ex.Message}";
         }
         finally
         {

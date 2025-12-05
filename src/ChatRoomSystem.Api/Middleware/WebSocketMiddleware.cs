@@ -127,7 +127,7 @@ public class WebSocketMiddleware
                 break;
             }
 
-            if (result.MessageType == WebSocketMessageType.Close)
+            if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
             {
                 _logger.LogInformation($"WebSocket close request from user {userId}");
                 break;
