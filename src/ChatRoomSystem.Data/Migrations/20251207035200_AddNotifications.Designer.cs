@@ -3,6 +3,7 @@ using System;
 using ChatRoomSystem.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatRoomSystem.Data.Migrations
 {
     [DbContext(typeof(ChatRoomDbContext))]
-    partial class ChatRoomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251207035200_AddNotifications")]
+    partial class AddNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
@@ -233,10 +236,6 @@ namespace ChatRoomSystem.Data.Migrations
                     b.Property<DateTime?>("EditedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("FileMimeType")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("FileName")
                         .HasMaxLength(255)
                         .HasColumnType("TEXT");
@@ -254,28 +253,12 @@ namespace ChatRoomSystem.Data.Migrations
                     b.Property<bool>("IsEdited")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("MediaDuration")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("MediaHeight")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("MediaWidth")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("RoomId")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("SenderId")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ThumbnailUrl")
-                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Timestamp")
@@ -353,24 +336,6 @@ namespace ChatRoomSystem.Data.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("AllowInviteLink")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("AllowMemberInvite")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AvatarUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BackgroundImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CoverImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -383,26 +348,16 @@ namespace ChatRoomSystem.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("InviteCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastActivityAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("MaxMembers")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("RequireApproval")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Topic")
                         .IsRequired()
@@ -414,9 +369,6 @@ namespace ChatRoomSystem.Data.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("CreatorId");
-
-                    b.HasIndex("InviteCode")
-                        .IsUnique();
 
                     b.HasIndex("Name");
 
@@ -459,47 +411,6 @@ namespace ChatRoomSystem.Data.Migrations
                     b.HasIndex("RoomId", "InvitedUserId", "Status");
 
                     b.ToTable("RoomInvitations");
-                });
-
-            modelBuilder.Entity("ChatRoomSystem.Data.Entities.RoomJoinRequest", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Message")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("RespondedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RespondedByUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RoomId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RespondedByUserId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("RoomId", "UserId", "Status");
-
-                    b.ToTable("RoomJoinRequests");
                 });
 
             modelBuilder.Entity("ChatRoomSystem.Data.Entities.RoomMember", b =>
@@ -826,32 +737,6 @@ namespace ChatRoomSystem.Data.Migrations
                     b.Navigation("InvitedUser");
 
                     b.Navigation("Room");
-                });
-
-            modelBuilder.Entity("ChatRoomSystem.Data.Entities.RoomJoinRequest", b =>
-                {
-                    b.HasOne("ChatRoomSystem.Data.Entities.ApplicationUser", "RespondedBy")
-                        .WithMany()
-                        .HasForeignKey("RespondedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("ChatRoomSystem.Data.Entities.Room", "Room")
-                        .WithMany()
-                        .HasForeignKey("RoomId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ChatRoomSystem.Data.Entities.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("RespondedBy");
-
-                    b.Navigation("Room");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ChatRoomSystem.Data.Entities.RoomMember", b =>

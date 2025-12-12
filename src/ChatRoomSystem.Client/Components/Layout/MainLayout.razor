@@ -1,87 +1,111 @@
 ﻿@inherits LayoutComponentBase
 @using ChatRoomSystem.Client.Services
 @inject AuthService AuthService
+@inject ApiService ApiService
 @inject NavigationManager Navigation
 
-<div class="app-container">
-    <!-- ✅ DEBUG: Hiện thông tin debug -->
-    @* <div style="position: fixed; top: 10px; right: 10px; background: black; color: lime; padding: 10px; z-index: 9999; font-family: monospace; font-size: 12px;">
-        <div>🔍 DEBUG INFO:</div>
-        <div>IsInitialized: @isInitialized</div>
-        <div>IsAuthenticated: @AuthService.IsAuthenticated</div>
-        <div>CurrentUser: @(AuthService.CurrentUser?.Username ?? "NULL")</div>
-        <div>Show Sidebar: @(isInitialized && AuthService.IsAuthenticated)</div>
-    </div> *@
+<WebSocketInitializer />
 
+<!-- Import Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<div class="app-layout">
     @if (isInitialized && AuthService.IsAuthenticated)
     {
-        <!-- Sidebar -->
-        <div class="sidebar">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <!-- Brand / Logo -->
             <div class="sidebar-header">
-                <h3>💬 ChatRoom</h3>
-                <div class="user-info">
-                    <div class="avatar">@GetInitials(AuthService.CurrentUser?.Username)</div>
-                    <div class="user-details">
-                        <strong>@AuthService.CurrentUser?.Username</strong>
-                        <span class="status online">● Online</span>
-                    </div>
+                <div class="brand-logo">
+                    <i class="fa-solid fa-comments"></i>
                 </div>
+                <span class="brand-text">ChatRoom</span>
             </div>
 
-            <nav class="sidebar-nav">
-                <NavLink class="nav-item" href="/rooms" Match="NavLinkMatch.All">
-                    <span class="icon">🏠</span>
-                    <span class="text">Rooms</span>
+            <!-- Navigation Links -->
+            <nav class="sidebar-menu">
+                <NavLink class="menu-item" href="/rooms" Match="NavLinkMatch.All">
+                    <div class="icon-box"><i class="fa-solid fa-house"></i></div>
+                    <span class="label">Rooms</span>
                 </NavLink>
 
-                <NavLink class="nav-item" href="/messages">
-                    <span class="icon">💬</span>
-                    <span class="text">Messages</span>
+                <NavLink class="menu-item" href="/messages">
+                    <div class="icon-box relative">
+                        <i class="fa-solid fa-message"></i>
+                        @if (unreadMessagesCount > 0)
+                        {
+                            <span class="notification-dot"></span>
+                        }
+                    </div>
+                    <span class="label">Messages</span>
                     @if (unreadMessagesCount > 0)
                     {
                         <span class="badge">@unreadMessagesCount</span>
                     }
                 </NavLink>
 
-                <NavLink class="nav-item" href="/friends">
-                    <span class="icon">👥</span>
-                    <span class="text">Friends</span>
+                <NavLink class="menu-item" href="/friends">
+                    <div class="icon-box relative">
+                        <i class="fa-solid fa-user-group"></i>
+                        @if (friendRequestsCount > 0)
+                        {
+                            <span class="notification-dot warning"></span>
+                        }
+                    </div>
+                    <span class="label">Friends</span>
                     @if (friendRequestsCount > 0)
                     {
-                        <span class="badge">@friendRequestsCount</span>
+                        <span class="badge warning">@friendRequestsCount</span>
                     }
                 </NavLink>
 
-                <NavLink class="nav-item" href="/notifications">
-                    <span class="icon">🔔</span>
-                    <span class="text">Notifications</span>
+                <NavLink class="menu-item" href="/notifications">
+                    <div class="icon-box relative">
+                        <i class="fa-solid fa-bell"></i>
+                        @if (notificationsCount > 0)
+                        {
+                            <span class="notification-dot danger"></span>
+                        }
+                    </div>
+                    <span class="label">Notifications</span>
                     @if (notificationsCount > 0)
                     {
-                        <span class="badge">@notificationsCount</span>
+                        <span class="badge danger">@notificationsCount</span>
                     }
                 </NavLink>
             </nav>
 
+            <!-- User Profile & Logout (Bottom) -->
             <div class="sidebar-footer">
-                <button class="btn btn-logout" @onclick="HandleLogout">
-                    <span class="icon">🚪</span>
-                    <span class="text">Logout</span>
+                <div class="user-card">
+                    <div class="user-avatar">
+                        @GetInitials(AuthService.CurrentUser?.Username)
+                        <span class="status-indicator online"></span>
+                    </div>
+                    <div class="user-info">
+                        <div class="username">@AuthService.CurrentUser?.Username</div>
+                        <div class="user-status">Online</div>
+                    </div>
+                </div>
+                <button class="btn-logout" @onclick="HandleLogout" title="Đăng xuất">
+                    <i class="fa-solid fa-right-from-bracket"></i>
                 </button>
             </div>
-        </div>
+        </aside>
 
-        <!-- Main Content -->
+        <!-- Main Content Area -->
         <main class="main-content">
-            @Body
+            <!-- Top Header (Mobile only or for Breadcrumbs later) -->
+            <div class="content-wrapper">
+                @Body
+            </div>
         </main>
     }
     else
     {
-        <!-- No sidebar when not authenticated -->
+        <!-- Full Screen Content (Login/Register) -->
         <main class="main-content-full">
-            <div style="padding: 20px; background: yellow; color: black;">
-                ⚠️ SIDEBAR HIDDEN - isInitialized: @isInitialized, IsAuthenticated: @AuthService.IsAuthenticated
-            </div>
             @Body
         </main>
     }
@@ -93,192 +117,283 @@
     <a class="dismiss">🗙</a>
 </div>
 
-<!-- CSS giữ nguyên -->
 <style>
+    :root {
+        --sidebar-bg: #1e1e2d;
+        --sidebar-hover: #2b2b40;
+        --sidebar-active: #3699ff; /* Blue accent */
+        --sidebar-text: #a2a3b7;
+        --sidebar-text-active: #ffffff;
+        --bg-body: #f3f6f9;
+        --bg-content: #ffffff;
+        --color-primary: #3699ff;
+        --color-danger: #f64e60;
+        --color-warning: #ffa800;
+        --color-success: #1bc5bd;
+        --font-family: 'Inter', sans-serif;
+        --sidebar-width: 260px;
+        --sidebar-width-collapsed: 80px;
+        --transition: all 0.3s ease;
+    }
+
     * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
     }
 
-    .app-container {
+    body {
+        font-family: var(--font-family);
+        background-color: var(--bg-body);
+        color: #3f4254;
+    }
+
+    .app-layout {
         display: flex;
         height: 100vh;
+        width: 100vw;
         overflow: hidden;
-        background: #f5f7fa;
     }
 
     /* ===== SIDEBAR ===== */
     .sidebar {
-        width: 280px;
-        background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+        width: var(--sidebar-width);
+        background-color: var(--sidebar-bg);
         display: flex;
         flex-direction: column;
-        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+        transition: var(--transition);
         z-index: 100;
+        box-shadow: 4px 0 10px rgba(0,0,0,0.05);
     }
 
+    /* Header / Logo */
     .sidebar-header {
-        padding: 2rem 1.5rem;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-        .sidebar-header h3 {
-            color: white;
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-    .user-info {
+        height: 80px;
         display: flex;
         align-items: center;
-        gap: 1rem;
+        padding: 0 25px;
+        gap: 12px;
     }
 
-    .avatar {
-        width: 48px;
-        height: 48px;
+    .brand-logo {
+        font-size: 28px;
+        color: var(--color-primary);
+    }
+
+    .brand-text {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: 0.5px;
+    }
+
+    /* Menu */
+    .sidebar-menu {
+        flex: 1;
+        padding: 20px 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow-y: auto;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        border-radius: 8px;
+        color: var(--sidebar-text);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 15px;
+        transition: var(--transition);
+        position: relative;
+    }
+
+        .menu-item:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-active);
+        }
+
+        .menu-item.active {
+            background-color: var(--sidebar-active);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(54, 153, 255, 0.3);
+        }
+
+    .icon-box {
+        width: 24px;
+        font-size: 18px;
+        display: flex;
+        justify-content: center;
+        margin-right: 12px;
+    }
+
+    .menu-item.active .icon-box {
+        color: #fff;
+    }
+
+    .relative {
+        position: relative;
+    }
+
+    /* Badges & Dots */
+    .badge {
+        margin-left: auto;
+        background: var(--color-primary);
+        color: white;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-weight: 700;
+    }
+
+        .badge.danger {
+            background: var(--color-danger);
+        }
+
+        .badge.warning {
+            background: var(--color-warning);
+            color: #fff;
+        }
+
+    .notification-dot {
+        position: absolute;
+        top: -2px;
+        right: -2px;
+        width: 8px;
+        height: 8px;
+        background: var(--color-primary);
+        border: 2px solid var(--sidebar-bg);
         border-radius: 50%;
-        background: white;
-        color: #6366f1;
+    }
+
+    .menu-item:hover .notification-dot {
+        border-color: var(--sidebar-hover);
+    }
+
+    .menu-item.active .notification-dot {
+        border-color: var(--sidebar-active);
+        background: #fff;
+    }
+
+    .notification-dot.danger {
+        background: var(--color-danger);
+    }
+
+    .notification-dot.warning {
+        background: var(--color-warning);
+    }
+
+
+    /* Footer / User Profile */
+    .sidebar-footer {
+        background: rgba(0,0,0,0.1);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .user-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        overflow: hidden;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #895df5, #6a45c7);
+        color: white;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 1.1rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+        position: relative;
+        flex-shrink: 0;
     }
 
-    .user-details {
+    .status-indicator {
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        width: 12px;
+        height: 12px;
+        background: var(--color-success);
+        border: 2px solid var(--sidebar-bg);
+        border-radius: 50%;
+    }
+
+    .user-info {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
     }
 
-        .user-details strong {
-            color: white;
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-    .status {
-        font-size: 0.875rem;
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
+    .username {
+        color: #fff;
+        font-weight: 600;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100px;
     }
 
-        .status.online {
-            color: #10b981;
-        }
-
-    /* ===== NAVIGATION ===== */
-    .sidebar-nav {
-        flex: 1;
-        padding: 1rem 0;
-        overflow-y: auto;
-    }
-
-    .nav-item {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding: 1rem 1.5rem;
-        color: rgba(255, 255, 255, 0.8);
-        text-decoration: none;
-        transition: all 0.2s ease;
-        position: relative;
-        font-weight: 500;
-        font-size: 1rem;
-    }
-
-        .nav-item:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-        }
-
-        .nav-item.active {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border-left: 4px solid white;
-        }
-
-        .nav-item .icon {
-            font-size: 1.5rem;
-            width: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .nav-item .text {
-            flex: 1;
-        }
-
-        .nav-item .badge {
-            background: #ef4444;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            min-width: 24px;
-            text-align: center;
-        }
-
-    /* ===== SIDEBAR FOOTER ===== */
-    .sidebar-footer {
-        padding: 1rem 1.5rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.2);
+    .user-status {
+        color: var(--sidebar-text);
+        font-size: 12px;
     }
 
     .btn-logout {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.875rem 1.5rem;
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
+        background: transparent;
         border: none;
-        border-radius: 12px;
-        font-weight: 500;
+        color: var(--sidebar-text);
+        font-size: 18px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        padding: 8px;
+        border-radius: 6px;
+        transition: var(--transition);
     }
 
         .btn-logout:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-
-        .btn-logout .icon {
-            font-size: 1.5rem;
+            background: rgba(255,255,255,0.1);
+            color: var(--color-danger);
         }
 
     /* ===== MAIN CONTENT ===== */
     .main-content {
         flex: 1;
+        background-color: var(--bg-body);
         overflow-y: auto;
-        background: #f5f7fa;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .content-wrapper {
+        padding: 30px;
+        flex: 1;
+        max-width: 1600px;
+        margin: 0 auto;
+        width: 100%;
     }
 
     .main-content-full {
-        flex: 1;
+        width: 100%;
+        height: 100vh;
         overflow-y: auto;
-        background: #f5f7fa;
+        background: var(--bg-body);
     }
 
     /* ===== ERROR UI ===== */
     #blazor-error-ui {
-        background: #ef4444;
-        color: white;
+        background: #fff;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+        color: var(--color-danger);
         padding: 1rem;
         position: fixed;
         bottom: 0;
@@ -286,50 +401,85 @@
         right: 0;
         z-index: 1000;
         display: none;
+        text-align: center;
     }
 
-        #blazor-error-ui .reload,
-        #blazor-error-ui .dismiss {
-            color: white;
-            margin-left: 1rem;
-            text-decoration: underline;
-            cursor: pointer;
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 4px;
+    }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
         }
+
+    .sidebar-menu::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
+    }
+
+        .sidebar-menu::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
 
     /* ===== RESPONSIVE ===== */
     @@media (max-width: 768px) {
-        .sidebar {
-            width: 80px;
+        :root {
+            --sidebar-width: 70px; /* Collapsed width */
         }
 
-        .sidebar-header h3,
-        .user-details,
-        .nav-item .text,
-        .btn-logout .text {
+        .brand-text,
+        .label,
+        .user-info,
+        .badge {
             display: none;
         }
 
         .sidebar-header {
-            padding: 1rem;
+            justify-content: center;
+            padding: 0;
         }
 
-        .user-info {
+        .menu-item {
+            justify-content: center;
+            padding: 15px 0;
+        }
+
+        .icon-box {
+            margin-right: 0;
+            font-size: 20px;
+        }
+
+        .sidebar-footer {
+            flex-direction: column;
+            gap: 15px;
+            padding: 15px 0;
+        }
+
+        .user-card {
             justify-content: center;
         }
 
-        .nav-item {
-            justify-content: center;
-            padding: 1rem;
+        .notification-dot {
+            width: 10px;
+            height: 10px;
+            top: 0;
+            right: 0;
+            border-color: var(--sidebar-bg);
         }
 
-            .nav-item .badge {
-                position: absolute;
-                top: 0.5rem;
-                right: 0.5rem;
-            }
-
-        .btn-logout {
-            justify-content: center;
+        .content-wrapper {
+            padding: 15px;
         }
     }
 </style>
@@ -343,45 +493,25 @@
     protected override void OnInitialized()
     {
         Console.WriteLine("🔵 [MainLayout] OnInitialized START");
-        Console.WriteLine($"🔵 [MainLayout] IsAuthenticated: {AuthService.IsAuthenticated}");
-        Console.WriteLine($"🔵 [MainLayout] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
-
-        // Subscribe to auth state changes
         AuthService.OnAuthStateChanged += OnAuthStateChanged;
-
-        Console.WriteLine("🔵 [MainLayout] OnInitialized END");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            Console.WriteLine("🔵 [MainLayout] OnAfterRenderAsync - firstRender");
-
-            // Initialize auth state after first render (when JS interop is available)
             await AuthService.InitializeAsync();
-
-            Console.WriteLine($"🔵 [MainLayout] After InitializeAsync - IsAuthenticated: {AuthService.IsAuthenticated}");
-            Console.WriteLine($"🔵 [MainLayout] After InitializeAsync - CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
-
             if (AuthService.IsAuthenticated)
             {
-                Console.WriteLine("🟢 [MainLayout] Loading counts...");
                 await LoadCounts();
             }
-
             isInitialized = true;
-            Console.WriteLine($"🟢 [MainLayout] isInitialized set to true");
             StateHasChanged();
         }
     }
 
     private void OnAuthStateChanged()
     {
-        Console.WriteLine($"🟡 [MainLayout] OnAuthStateChanged triggered");
-        Console.WriteLine($"🟡 [MainLayout] IsAuthenticated: {AuthService.IsAuthenticated}");
-        Console.WriteLine($"🟡 [MainLayout] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
-
         InvokeAsync(async () =>
         {
             if (AuthService.IsAuthenticated)
@@ -394,36 +524,35 @@
 
     private async Task LoadCounts()
     {
-        Console.WriteLine("🔵 [MainLayout] LoadCounts called");
-        // TODO: Load actual counts from API
-        await Task.Delay(100);
-        Console.WriteLine("🟢 [MainLayout] Counts loaded");
+        try
+        {
+            friendRequestsCount = (await ApiService.GetFriendRequestsAsync()).Count;
+            unreadMessagesCount = await ApiService.GetUnreadMessagesCountAsync();
+            notificationsCount = await ApiService.GetUnreadNotificationCountAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
     }
 
     private async Task HandleLogout()
     {
-        Console.WriteLine("🔵 [MainLayout] Logging out...");
         await AuthService.LogoutAsync();
         Navigation.NavigateTo("/login");
     }
 
     private string GetInitials(string? username)
     {
-        if (string.IsNullOrEmpty(username))
-            return "?";
-
+        if (string.IsNullOrEmpty(username)) return "?";
         var parts = username.Split(' ');
-        if (parts.Length >= 2)
-            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
-
-        return username.Length >= 2
-            ? username.Substring(0, 2).ToUpper()
-            : username[0].ToString().ToUpper();
+        if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return username.Length >= 2 ? username.Substring(0, 2).ToUpper() : username[0].ToString().ToUpper();
     }
 
     public void Dispose()
     {
-        Console.WriteLine("🔵 [MainLayout] Disposing...");
         AuthService.OnAuthStateChanged -= OnAuthStateChanged;
     }
 }

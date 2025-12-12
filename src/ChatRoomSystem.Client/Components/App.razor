@@ -23,3 +23,19 @@
     private static Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode InteractiveServer { get; } =
         new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false);
 }
+<script>
+    window.autoResizeTextarea = function (id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.style.height = 'auto'; // Reset để tính toán lại chiều cao khi xóa bớt chữ
+            el.style.height = el.scrollHeight + 'px'; // Set chiều cao bằng nội dung
+        }
+    }
+
+    window.resetTextareaHeight = function (id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.style.height = 'auto'; // Trả về chiều cao mặc định (theo CSS min-height)
+        }
+    }
+</script>

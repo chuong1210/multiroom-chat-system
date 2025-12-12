@@ -744,19 +744,10 @@
     }
 </style>
 
-@code {
-    private class ConversationDto
-    {
-        public string UserId { get; set; } = "";
-        public string Username { get; set; } = "";
-        public string LastMessage { get; set; } = "";
-        public DateTime LastMessageTime { get; set; }
-        public int UnreadCount { get; set; }
-        public bool IsOnline { get; set; }
-        public bool IsTyping { get; set; }
-        public bool HasUnread { get; set; }
-    }
 
+
+<!-- HTML giữ nguyên -->
+@code {
     private List<ConversationDto> conversations = new();
     private List<ConversationDto> filteredConversations = new();
     private List<UserDto> friends = new();
@@ -783,46 +774,18 @@
         isLoading = true;
         try
         {
-            // TODO: Load actual conversations from API
-            // For now, create mock data
-            await Task.Delay(500);
+            Console.WriteLine("🔵 [Messages] Loading conversations...");
 
-            conversations = new List<ConversationDto>
-            {
-                new ConversationDto
-                {
-                    UserId = "user1",
-                    Username = "Alice Johnson",
-                    LastMessage = "Hey! How are you doing?",
-                    LastMessageTime = DateTime.UtcNow.AddMinutes(-5),
-                    UnreadCount = 2,
-                    IsOnline = true,
-                    HasUnread = true
-                },
-                new ConversationDto
-                {
-                    UserId = "user2",
-                    Username = "Bob Smith",
-                    LastMessage = "Sure, see you tomorrow!",
-                    LastMessageTime = DateTime.UtcNow.AddHours(-2),
-                    UnreadCount = 0,
-                    IsOnline = false,
-                    HasUnread = false
-                },
-                new ConversationDto
-                {
-                    UserId = "user3",
-                    Username = "Charlie Brown",
-                    LastMessage = "Thanks for your help!",
-                    LastMessageTime = DateTime.UtcNow.AddDays(-1),
-                    UnreadCount = 0,
-                    IsOnline = true,
-                    HasUnread = false,
-                    IsTyping = false
-                }
-            };
+            // ✅ Load từ API
+            conversations = await ApiService.GetConversationsAsync();
+
+            Console.WriteLine($"🟢 [Messages] Loaded {conversations.Count} conversations");
 
             FilterConversations();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Messages] Error: {ex.Message}");
         }
         finally
         {
@@ -864,8 +827,18 @@
         isLoadingFriends = true;
         try
         {
+            Console.WriteLine("🔵 [Messages] Loading friends...");
+
+            // ✅ Load friends từ API
             friends = await ApiService.GetFriendsAsync();
+
+            Console.WriteLine($"🟢 [Messages] Loaded {friends.Count} friends");
+
             FilterFriends();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Messages] Error loading friends: {ex.Message}");
         }
         finally
         {
@@ -892,11 +865,25 @@
 
     private void StartNewChat(string friendId)
     {
+        Console.WriteLine($"🔵 [Messages] Starting chat with: {friendId}");
         Navigation.NavigateTo($"/chat/{friendId}");
     }
 
-    private void OpenChat(string userId)
+    private async Task OpenChat(string userId)
     {
+        Console.WriteLine($"🔵 [Messages] Opening chat with: {userId}");
+
+        // ✅ Mark conversation as read
+        await ApiService.MarkConversationAsReadAsync(userId);
+
+        // Update unread count locally
+        var conversation = conversations.FirstOrDefault(c => c.UserId == userId);
+        if (conversation != null)
+        {
+            conversation.UnreadCount = 0;
+            conversation.HasUnread = false;
+        }
+
         Navigation.NavigateTo($"/chat/{userId}");
     }
 

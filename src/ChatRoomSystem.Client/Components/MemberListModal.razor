@@ -1,0 +1,689 @@
+﻿@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject ApiService ApiService
+@inject AuthService AuthService
+
+@if (ShowModal && RoomId != null)
+{
+    <div class="modal-overlay" @onclick="HandleBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>👥 Members (@members.Count)</h3>
+                <button class="btn-close" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Search -->
+                <div class="search-box">
+                    <input type="text"
+                           class="search-input"
+                           placeholder="🔍 Search members..."
+                           @bind="searchQuery"
+                           @bind:event="oninput"
+                           @bind:after="FilterMembers" />
+                </div>
+
+                <!-- Members List -->
+                @if (isLoading)
+                {
+                    <div class="loading-state">
+                        <div class="spinner-border"></div>
+                        <p>Loading members...</p>
+                    </div>
+                }
+                else if (filteredMembers.Count == 0)
+                {
+                    <div class="empty-state">
+                        <p>No members found</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="members-list">
+                        @foreach (var member in filteredMembers)
+                        {
+                            <div class="member-item">
+                                <div class="member-avatar @(member.IsOnline ? "online" : "")">
+                                    @GetInitials(member.Username)
+                                    @if (member.IsOnline)
+                                    {
+                                        <span class="online-dot"></span>
+                                    }
+                                </div>
+
+                                <div class="member-info">
+                                    <div class="member-name">
+                                        @member.Username
+                                        @if (member.IsCreator)
+                                        {
+                                            <span class="badge badge-creator">👑 Owner</span>
+                                        }
+                                        else if (member.IsAdmin)
+                                        {
+                                            <span class="badge badge-admin">⭐ Admin</span>
+                                        }
+                                    </div>
+                                    <div class="member-status">
+                                        @if (member.IsOnline)
+                                        {
+                                            <span class="text-success">● Online</span>
+                                        }
+                                        else if (member.LastSeen != null)
+                                        {
+                                            <span class="text-muted">Last seen @GetRelativeTime(member.LastSeen.Value)</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <!-- Actions (only for admins) -->
+                                @if (IsAdmin && !member.IsCreator && member.UserId != AuthService.CurrentUser?.Id)
+                                {
+                                    <div class="member-actions">
+                                        <button class="btn-icon"
+                                                @onclick="() => ShowMemberActions(member)"
+                                                title="More actions">
+                                            ⋮
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Action Menu -->
+                            @if (selectedMember?.UserId == member.UserId && showActionMenu)
+                            {
+                                <div class="action-menu">
+                                    @if (IsCreator)
+                                    {
+                                        @if (member.IsAdmin)
+                                        {
+                                            <button class="action-item" @onclick="() => DemoteAdmin(member)">
+                                                <span>⬇️ Remove Admin</span>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="action-item" @onclick="() => PromoteAdmin(member)">
+                                                <span>⬆️ Make Admin</span>
+                                            </button>
+                                        }
+                                    }
+
+                                    <button class="action-item danger" @onclick="() => ShowKickConfirm(member)">
+                                        <span>🚫 Kick from Room</span>
+                                    </button>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Kick Confirmation Modal -->
+@if (showKickConfirm && memberToKick != null)
+{
+    <div class="confirm-overlay" @onclick="HandleConfirmBackdropClick">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>⚠️ Kick Member</h4>
+            <p>Are you sure you want to kick <strong>@memberToKick.Username</strong> from the room?</p>
+            <div class="confirm-actions">
+                <button class="btn btn-secondary" @onclick="HideKickConfirm">Cancel</button>
+                <button class="btn btn-danger" @onclick="ConfirmKick" disabled="@isKicking">
+                    @if (isKicking)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    else
+                    {
+                        <span>Kick</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-dialog {
+        position: relative;
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        pointer-events: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn-close:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .search-box {
+        margin-bottom: 1rem;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.875rem;
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+    .members-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .member-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 12px;
+        background: #f9fafb;
+        position: relative;
+        transition: all 0.2s;
+    }
+
+        .member-item:hover {
+            background: #f3f4f6;
+        }
+
+    .member-avatar {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .online-dot {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 12px;
+        height: 12px;
+        background: #10b981;
+        border: 2px solid white;
+        border-radius: 50%;
+    }
+
+    .member-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .member-name {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #1f2937;
+        margin-bottom: 0.25rem;
+    }
+
+    .member-status {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .badge {
+        padding: 0.125rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.625rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .badge-creator {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: white;
+    }
+
+    .badge-admin {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+    }
+
+    .member-actions {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .btn-icon {
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-icon:hover {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+
+    .action-menu {
+        margin-top: 0.5rem;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+
+    .action-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: none;
+        background: white;
+        text-align: left;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.875rem;
+    }
+
+        .action-item:hover {
+            background: #f3f4f6;
+        }
+
+        .action-item.danger {
+            color: #ef4444;
+        }
+
+            .action-item.danger:hover {
+                background: #fef2f2;
+            }
+
+    .loading-state,
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #6b7280;
+    }
+
+    /* Confirmation Dialog */
+    .confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1100;
+    }
+
+    .confirm-dialog {
+        position: relative;
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        pointer-events: auto;
+    }
+
+        .confirm-dialog h4 {
+            margin: 0 0 1rem;
+            font-size: 1.125rem;
+        }
+
+        .confirm-dialog p {
+            margin: 0 0 1.5rem;
+            color: #6b7280;
+        }
+
+    .confirm-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: none;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-secondary {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+        }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .text-success {
+        color: #10b981;
+    }
+
+    .text-muted {
+        color: #9ca3af;
+    }
+
+    .spinner-border {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 0.2rem solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spinner 0.75s linear infinite;
+    }
+
+    .spinner-border-sm {
+        width: 0.875rem;
+        height: 0.875rem;
+        border-width: 0.15rem;
+    }
+
+    @@keyframes spinner {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public bool ShowModal { get; set; }
+
+    [Parameter]
+    public string? RoomId { get; set; }
+
+    [Parameter]
+    public bool IsAdmin { get; set; }
+
+    [Parameter]
+    public bool IsCreator { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnMemberKicked { get; set; }
+
+    private List<RoomMemberDto> members = new();
+    private List<RoomMemberDto> filteredMembers = new();
+    private string searchQuery = "";
+    private bool isLoading = false;
+    private RoomMemberDto? selectedMember = null;
+    private bool showActionMenu = false;
+    private RoomMemberDto? memberToKick = null;
+    private bool showKickConfirm = false;
+    private bool isKicking = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ShowModal && !string.IsNullOrEmpty(RoomId))
+        {
+            await LoadMembers();
+        }
+    }
+
+    private void HandleBackdropClick()
+    {
+        Close();
+    }
+
+    private void HandleConfirmBackdropClick()
+    {
+        HideKickConfirm();
+    }
+
+    private async Task LoadMembers()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            members = await ApiService.GetRoomMembersAsync(RoomId!);
+            FilterMembers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading members: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FilterMembers()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredMembers = members;
+        }
+        else
+        {
+            var query = searchQuery.ToLower();
+            filteredMembers = members
+                .Where(m => m.Username.ToLower().Contains(query))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void ShowMemberActions(RoomMemberDto member)
+    {
+        if (selectedMember?.UserId == member.UserId)
+        {
+            selectedMember = null;
+            showActionMenu = false;
+        }
+        else
+        {
+            selectedMember = member;
+            showActionMenu = true;
+        }
+        StateHasChanged();
+    }
+
+    private async Task PromoteAdmin(RoomMemberDto member)
+    {
+        try
+        {
+            var success = await ApiService.PromoteAdminAsync(RoomId!, member.UserId, true);
+            if (success)
+            {
+                member.IsAdmin = true;
+                showActionMenu = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error promoting admin: {ex.Message}");
+        }
+    }
+
+    private async Task DemoteAdmin(RoomMemberDto member)
+    {
+        try
+        {
+            var success = await ApiService.PromoteAdminAsync(RoomId!, member.UserId, false);
+            if (success)
+            {
+                member.IsAdmin = false;
+                showActionMenu = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error demoting admin: {ex.Message}");
+        }
+    }
+
+    private void ShowKickConfirm(RoomMemberDto member)
+    {
+        memberToKick = member;
+        showKickConfirm = true;
+        showActionMenu = false;
+        StateHasChanged();
+    }
+
+    private void HideKickConfirm()
+    {
+        showKickConfirm = false;
+        memberToKick = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmKick()
+    {
+        if (memberToKick == null || string.IsNullOrEmpty(RoomId)) return;
+
+        isKicking = true;
+        StateHasChanged();
+
+        try
+        {
+            var success = await ApiService.KickMemberAsync(RoomId, memberToKick.UserId);
+            if (success)
+            {
+                members.Remove(memberToKick);
+                FilterMembers();
+                await OnMemberKicked.InvokeAsync();
+                HideKickConfirm();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error kicking member: {ex.Message}");
+        }
+        finally
+        {
+            isKicking = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private string GetInitials(string? username)
+    {
+        if (string.IsNullOrEmpty(username)) return "?";
+        var parts = username.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return username.Length >= 2
+            ? username.Substring(0, 2).ToUpper()
+            : username[0].ToString().ToUpper();
+    }
+
+    private string GetRelativeTime(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt.ToUniversalTime();
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return dt.ToString("MMM dd");
+    }
+}

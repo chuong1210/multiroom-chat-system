@@ -1,8 +1,11 @@
+// ChatRoomSystem.Api/Services/WebSocketConnectionManager.cs
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using ChatRoomSystem.Data;
 using ChatRoomSystem.Shared.Models;
+using Microsoft.EntityFrameworkCore;
 using CustomWebSocketMessageType = ChatRoomSystem.Shared.Models.WebSocketMessageType;
 using NetWebSocketMessageType = System.Net.WebSockets.WebSocketMessageType;
 
@@ -24,16 +27,20 @@ public class WebSocketConnectionManager
     private readonly ConcurrentDictionary<string, HashSet<string>> _roomUsers = new();
 
     private readonly ILogger<WebSocketConnectionManager> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public WebSocketConnectionManager(ILogger<WebSocketConnectionManager> logger)
+    public WebSocketConnectionManager(
+        ILogger<WebSocketConnectionManager> logger,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
     /// Add connection mới
     /// </summary>
-    public void AddConnection(string userId, WebSocket socket, string username)
+    public async Task AddConnectionAsync(string userId, WebSocket socket, string username)
     {
         _connections[userId] = socket;
         _userInfo[userId] = new UserConnectionInfo
@@ -43,7 +50,36 @@ public class WebSocketConnectionManager
             ConnectedAt = DateTime.UtcNow
         };
 
-        _logger.LogInformation($"User {username} ({userId}) connected. Total connections: {_connections.Count}");
+        // ✅ Update User.IsOnline in database
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ChatRoomDbContext>();
+
+            var user = await dbContext.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsOnline = true;
+                user.LastSeen = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync();
+
+                _logger.LogInformation($"✅ User {username} ({userId}) marked as online in database");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to update online status for user {userId}");
+        }
+
+        _logger.LogInformation($"✅ User {username} ({userId}) connected. Total connections: {_connections.Count}");
+    }
+
+    /// <summary>
+    /// Add connection mới (sync version for backward compatibility)
+    /// </summary>
+    public void AddConnection(string userId, WebSocket socket, string username)
+    {
+        _ = AddConnectionAsync(userId, socket, username);
     }
 
     /// <summary>
@@ -75,11 +111,35 @@ public class WebSocketConnectionManager
         {
             if (_roomUsers.TryGetValue(roomId, out var users))
             {
-                users.Remove(userId);
+                lock (users)
+                {
+                    users.Remove(userId);
+                }
             }
         }
 
-        _logger.LogInformation($"User {userId} disconnected. Total connections: {_connections.Count}");
+        // ✅ Update User.IsOnline in database
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ChatRoomDbContext>();
+
+            var user = await dbContext.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsOnline = false;
+                user.LastSeen = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync();
+
+                _logger.LogInformation($"👋 User {userId} marked as offline in database");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to update offline status for user {userId}");
+        }
+
+        _logger.LogInformation($"👋 User {userId} disconnected. Total connections: {_connections.Count}");
     }
 
     /// <summary>
@@ -110,7 +170,7 @@ public class WebSocketConnectionManager
             users.Add(userId);
         }
 
-        _logger.LogInformation($"User {userId} joined room {roomId}. Room members: {users.Count}");
+        _logger.LogInformation($"📥 User {userId} joined room {roomId}. Room members: {users.Count}");
     }
 
     /// <summary>
@@ -125,7 +185,7 @@ public class WebSocketConnectionManager
                 users.Remove(userId);
             }
 
-            _logger.LogInformation($"User {userId} left room {roomId}. Room members: {users.Count}");
+            _logger.LogInformation($"📤 User {userId} left room {roomId}. Room members: {users.Count}");
         }
     }
 
@@ -153,6 +213,7 @@ public class WebSocketConnectionManager
         var socket = GetConnection(userId);
         if (socket == null || socket.State != WebSocketState.Open)
         {
+            _logger.LogWarning($"⚠️ Cannot send message to user {userId}: socket not available or not open");
             return;
         }
 
@@ -163,12 +224,27 @@ public class WebSocketConnectionManager
             var buffer = new ArraySegment<byte>(bytes);
 
             await socket.SendAsync(buffer, NetWebSocketMessageType.Text, true, CancellationToken.None);
+
+            _logger.LogDebug($"✉️ Sent message type {message.Type} to user {userId}");
+        }
+        catch (WebSocketException ex) when (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+        {
+            _logger.LogWarning($"⚠️ WebSocket closed prematurely for user {userId}");
+            await RemoveConnectionAsync(userId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error sending message to user {userId}");
+            _logger.LogError(ex, $"🔴 Error sending message to user {userId}");
             await RemoveConnectionAsync(userId);
         }
+    }
+
+    /// <summary>
+    /// ✅ Send message đến một user cụ thể (alias method for consistency)
+    /// </summary>
+    public async Task SendToUserAsync(string userId, WebSocketMessage message)
+    {
+        await SendMessageAsync(userId, message);
     }
 
     /// <summary>
@@ -178,13 +254,20 @@ public class WebSocketConnectionManager
     {
         var userIds = GetUsersInRoom(roomId);
 
-        var tasks = userIds
-            .Where(uid => uid != excludeUserId)
-            .Select(uid => SendMessageAsync(uid, message));
+        _logger.LogInformation($"📢 Broadcasting message type {message.Type} to room {roomId} ({userIds.Count} users)");
+
+        var tasks = new List<Task>();
+        foreach (var uid in userIds)
+        {
+            if (uid != excludeUserId)
+            {
+                tasks.Add(SendMessageAsync(uid, message));
+            }
+        }
 
         await Task.WhenAll(tasks);
 
-        _logger.LogDebug($"Broadcasted message type {message.Type} to room {roomId} ({userIds.Count} users)");
+        _logger.LogDebug($"✅ Broadcast complete to room {roomId}");
     }
 
     /// <summary>
@@ -198,7 +281,7 @@ public class WebSocketConnectionManager
 
         await Task.WhenAll(tasks);
 
-        _logger.LogDebug($"Broadcasted message type {message.Type} to all users ({_connections.Count} users)");
+        _logger.LogDebug($"📢 Broadcasted message type {message.Type} to all users ({_connections.Count} users)");
     }
 
     /// <summary>
@@ -216,6 +299,22 @@ public class WebSocketConnectionManager
     {
         _userInfo.TryGetValue(userId, out var info);
         return info;
+    }
+
+    /// <summary>
+    /// Get total connection count
+    /// </summary>
+    public int GetConnectionCount()
+    {
+        return _connections.Count;
+    }
+
+    /// <summary>
+    /// Get room member count
+    /// </summary>
+    public int GetRoomMemberCount(string roomId)
+    {
+        return GetUsersInRoom(roomId).Count;
     }
 }
 

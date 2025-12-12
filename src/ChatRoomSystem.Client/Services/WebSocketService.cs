@@ -139,7 +139,7 @@ public class WebSocketService : IAsyncDisposable
     {
         var message = new WebSocketMessage
         {
-            Type = CustomWebSocketMessageType.JoinRoom,
+            Type = CustomWebSocketMessageType.JoinRoomRequest,
             Data = JsonSerializer.Serialize(new JoinRoomPayload { RoomId = roomId }),
             Timestamp = DateTime.UtcNow
         };

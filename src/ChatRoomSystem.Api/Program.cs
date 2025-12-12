@@ -70,7 +70,11 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<WebSocketConnectionManager>();
 builder.Services.AddScoped<WebSocketMessageHandler>();
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<NotificationService>();
+// Program.cs
+builder.Services.AddScoped<IFileUploadService, LocalFileUploadService>();
 
+// Enable static files
 // ===== Controllers =====
 builder.Services.AddControllers();
 
@@ -139,6 +143,7 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine($"Error migrating database: {ex.Message}");
     }
 }
+app.UseStaticFiles(); // ✅ Important for serving uploaded files
 
 // ===== Middleware Pipeline =====
 

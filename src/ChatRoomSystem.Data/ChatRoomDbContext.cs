@@ -1,7 +1,9 @@
 using ChatRoomSystem.Data.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-
+//# Từ thư mục root của solution
+//dotnet ef migrations add AddNotifications --project ChatRoomSystem.Data --startup-project ChatRoomSystem.Api
+//    dotnet ef database update --project ChatRoomSystem.Data --startup-project ChatRoomSystem.Api
 namespace ChatRoomSystem.Data;
 
 /// <summary>
@@ -23,6 +25,9 @@ public class ChatRoomDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RoomInvitation> RoomInvitations { get; set; } = null!;
     public DbSet<ChatRoomTask> Tasks { get; set; } = null!;
     public DbSet<TaskComment> TaskComments { get; set; } = null!;
+    public DbSet<Notification> Notifications { get; set; } = null!;
+    public DbSet<RoomJoinRequest> RoomJoinRequests { get; set; } = null!;
+
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -45,6 +50,8 @@ public class ChatRoomDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(r => r.Name);
             entity.HasIndex(r => r.CreatedAt);
+            entity.HasIndex(r => r.InviteCode).IsUnique(); // ✅ Unique invite code
+
         });
 
         // Configure RoomMember (many-to-many relationship giữa User và Room)
@@ -62,7 +69,25 @@ public class ChatRoomDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(rm => new { rm.UserId, rm.RoomId }).IsUnique();
         });
+        builder.Entity<RoomJoinRequest>(entity =>
+        {
+            entity.HasOne(jr => jr.Room)
+                .WithMany()
+                .HasForeignKey(jr => jr.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(jr => jr.User)
+                .WithMany()
+                .HasForeignKey(jr => jr.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(jr => jr.RespondedBy)
+                .WithMany()
+                .HasForeignKey(jr => jr.RespondedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(jr => new { jr.RoomId, jr.UserId, jr.Status });
+        });
         // Configure Message
         builder.Entity<Message>(entity =>
         {
@@ -168,6 +193,17 @@ public class ChatRoomDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(tc => new { tc.TaskId, tc.CreatedAt });
+        });
+
+
+        builder.Entity<Notification>(entity =>
+        {
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt });
         });
     }
 }

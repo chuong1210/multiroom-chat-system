@@ -1,12 +1,10 @@
+﻿// ChatRoomSystem.Data/Entities/Message.cs
 using ChatRoomSystem.Shared.Models;
 using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace ChatRoomSystem.Data.Entities;
 
-/// <summary>
-/// Entity cho Message
-/// </summary>
 public class Message
 {
     [Key]
@@ -26,6 +24,7 @@ public class Message
 
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
+    // ✅ File attachments
     [MaxLength(500)]
     public string? FileUrl { get; set; }
 
@@ -34,11 +33,22 @@ public class Message
 
     public long? FileSize { get; set; }
 
+    [MaxLength(100)]
+    public string? FileMimeType { get; set; }
+
+    // ✅ Media metadata
+    public int? MediaWidth { get; set; }
+    public int? MediaHeight { get; set; }
+    public int? MediaDuration { get; set; }
+
+    [MaxLength(500)]
+    public string? ThumbnailUrl { get; set; }
+
     public bool IsEdited { get; set; }
-
     public DateTime? EditedAt { get; set; }
-
     public bool IsDeleted { get; set; }
+    public bool IsRead { get; set; }
+
 
     // Navigation properties
     public virtual Room Room { get; set; } = null!;

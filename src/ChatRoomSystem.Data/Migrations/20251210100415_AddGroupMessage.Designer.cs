@@ -3,6 +3,7 @@ using System;
 using ChatRoomSystem.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatRoomSystem.Data.Migrations
 {
     [DbContext(typeof(ChatRoomDbContext))]
-    partial class ChatRoomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251210100415_AddGroupMessage")]
+    partial class AddGroupMessage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
@@ -252,9 +255,6 @@ namespace ChatRoomSystem.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsEdited")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsRead")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("MediaDuration")

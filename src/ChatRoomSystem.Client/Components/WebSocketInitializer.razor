@@ -1,0 +1,81 @@
+﻿@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject WebSocketService WebSocketService
+@inject AuthService AuthService
+@implements IAsyncDisposable
+
+@code {
+    private System.Timers.Timer? reconnectTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to auth changes
+        AuthService.OnAuthStateChanged += OnAuthChanged;
+
+        // Connect if authenticated
+        if (AuthService.IsAuthenticated)
+        {
+            await ConnectWebSocket();
+        }
+    }
+
+    private async void OnAuthChanged()
+    {
+        if (AuthService.IsAuthenticated && !WebSocketService.IsConnected)
+        {
+            await ConnectWebSocket();
+        }
+        else if (!AuthService.IsAuthenticated && WebSocketService.IsConnected)
+        {
+            await WebSocketService.DisconnectAsync();
+        }
+    }
+
+    private async Task ConnectWebSocket()
+    {
+        try
+        {
+            var token = await AuthService.GetTokenAsync();
+            if (!string.IsNullOrEmpty(token) && !WebSocketService.IsConnected)
+            {
+                await WebSocketService.ConnectAsync(token);
+                Console.WriteLine("🟢 [WebSocketInit] Connected");
+
+                // Setup reconnect timer
+                StartReconnectTimer();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [WebSocketInit] Connection failed: {ex.Message}");
+
+            // Retry after 3 seconds
+            await Task.Delay(3000);
+            await ConnectWebSocket();
+        }
+    }
+
+    private void StartReconnectTimer()
+    {
+        reconnectTimer?.Dispose();
+        reconnectTimer = new System.Timers.Timer(5000); // Check every 5 seconds
+        reconnectTimer.Elapsed += async (s, e) =>
+        {
+            if (AuthService.IsAuthenticated && !WebSocketService.IsConnected)
+            {
+                Console.WriteLine("⚠️ [WebSocketInit] Reconnecting...");
+                await ConnectWebSocket();
+            }
+        };
+        reconnectTimer.Start();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        AuthService.OnAuthStateChanged -= OnAuthChanged;
+        reconnectTimer?.Dispose();
+
+        // Don't disconnect here - let it stay connected
+        // await WebSocketService.DisconnectAsync();
+    }
+}

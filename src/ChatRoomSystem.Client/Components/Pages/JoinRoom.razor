@@ -1,0 +1,422 @@
+﻿<!-- ChatRoomSystem.Client/Pages/JoinRoom.razor -->
+@page "/join/{InviteCode}"
+@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject ApiService ApiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Join Room - Chat Room System</PageTitle>
+
+@if (isLoading)
+{
+    <div class="loading-container">
+        <div class="spinner-border"></div>
+        <p>Loading room info...</p>
+    </div>
+}
+else if (roomPreview == null)
+{
+    <div class="error-container">
+        <div class="error-icon">❌</div>
+        <h2>Invalid Invite Link</h2>
+        <p>This invite link is invalid or has expired.</p>
+        <button class="btn btn-primary" @onclick="GoHome">Go to Home</button>
+    </div>
+}
+else
+{
+    <div class="join-container">
+        <!-- Room Preview Card -->
+        <div class="room-preview-card">
+            <!-- Cover Image -->
+            @if (!string.IsNullOrEmpty(roomPreview.CoverImageUrl))
+            {
+                <div class="room-cover" style="background-image: url('@roomPreview.CoverImageUrl')"></div>
+            }
+            else
+            {
+                <div class="room-cover room-cover-gradient"></div>
+            }
+
+            <!-- Room Avatar -->
+            <div class="room-avatar-container">
+                @if (!string.IsNullOrEmpty(roomPreview.AvatarUrl))
+                {
+                    <img src="@roomPreview.AvatarUrl" alt="Avatar" class="room-avatar" />
+                }
+                else
+                {
+                    <div class="room-avatar room-avatar-placeholder">
+                        @GetInitials(roomPreview.Name)
+                    </div>
+                }
+            </div>
+
+            <!-- Room Info -->
+            <div class="room-info">
+                <h1>@roomPreview.Name</h1>
+                <p class="room-description">@roomPreview.Description</p>
+
+                <div class="room-stats">
+                    <div class="stat">
+                        <span class="stat-icon">👥</span>
+                        <span class="stat-value">@roomPreview.MembersCount members</span>
+                    </div>
+                    @if (roomPreview.RequireApproval)
+                    {
+                        <div class="stat">
+                            <span class="stat-icon">🔒</span>
+                            <span class="stat-value">Approval required</span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Join Actions -->
+                <div class="join-actions">
+                    @if (roomPreview.AlreadyMember)
+                    {
+                        <div class="alert alert-info">
+                            ✓ You're already a member of this room
+                        </div>
+                        <button class="btn btn-primary" @onclick="GoToRoom">
+                            Open Room
+                        </button>
+                    }
+                    else if (roomPreview.HasPendingRequest)
+                    {
+                        <div class="alert alert-warning">
+                            ⏳ Your join request is pending approval
+                        </div>
+                    }
+                    else if (roomPreview.IsFull)
+                    {
+                        <div class="alert alert-error">
+                            ⚠️ This room is full and cannot accept new members
+                        </div>
+                    }
+                    else
+                    {
+                        @if (roomPreview.RequireApproval)
+                        {
+                            <div class="form-group">
+                                <label>Message (Optional)</label>
+                                <textarea class="form-control"
+                                          rows="3"
+                                          placeholder="Introduce yourself..."
+                                          @bind="joinMessage"></textarea>
+                            </div>
+                        }
+
+                        <button class="btn btn-primary btn-large"
+                                @onclick="JoinRoomAsync"
+                                disabled="@isJoining">
+                            @if (isJoining)
+                            {
+                                <span class="spinner-border spinner-border-sm"></span>
+                                <span>Joining...</span>
+                            }
+                            else
+                            {
+                                <span>🚀 @(roomPreview.RequireApproval ? "Request to Join" : "Join Room")</span>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .loading-container,
+    .error-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .error-icon {
+        font-size: 5rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-container h2 {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        color: #1f2937;
+    }
+
+    .error-container p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .join-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .room-preview-card {
+        background: white;
+        border-radius: 24px;
+        max-width: 500px;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .room-cover {
+        width: 100%;
+        height: 200px;
+        background-size: cover;
+        background-position: center;
+        position: relative;
+    }
+
+    .room-cover-gradient {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .room-avatar-container {
+        display: flex;
+        justify-content: center;
+        margin-top: -60px;
+        padding: 0 2rem;
+    }
+
+    .room-avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 6px solid white;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        object-fit: cover;
+    }
+
+    .room-avatar-placeholder {
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 2.5rem;
+    }
+
+    .room-info {
+        padding: 1.5rem 2rem 2rem;
+        text-align: center;
+    }
+
+        .room-info h1 {
+            font-size: 1.75rem;
+            margin: 0 0 0.5rem;
+            color: #1f2937;
+        }
+
+    .room-description {
+        color: #6b7280;
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+    }
+
+    .room-stats {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .stat-icon {
+        font-size: 1.25rem;
+    }
+
+    .join-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 12px;
+        font-size: 0.875rem;
+    }
+
+    .alert-info {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .alert-warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .alert-error {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .form-group {
+        text-align: left;
+    }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.875rem;
+    }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+        }
+
+    .btn-large {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string InviteCode { get; set; } = "";
+
+    private RoomPreviewDto? roomPreview = null;
+    private bool isLoading = true;
+    private bool isJoining = false;
+    private string joinMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/login?returnUrl=/join/{InviteCode}");
+            return;
+        }
+
+        await LoadRoomPreview();
+    }
+
+    private async Task LoadRoomPreview()
+    {
+        isLoading = true;
+        try
+        {
+            roomPreview = await ApiService.GetRoomPreviewAsync(InviteCode);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task JoinRoomAsync()
+    {
+        if (roomPreview == null) return;
+
+        isJoining = true;
+        try
+        {
+            var (success, message, requiresApproval) = await ApiService.JoinRoomByCodeAsync(InviteCode, joinMessage);
+
+            if (success)
+            {
+                if (requiresApproval)
+                {
+                    roomPreview.HasPendingRequest = true;
+                }
+                else
+                {
+                    // Navigate to room
+                    Navigation.NavigateTo($"/room/{roomPreview.Id}");
+                }
+            }
+        }
+        finally
+        {
+            isJoining = false;
+        }
+    }
+
+    private void GoToRoom()
+    {
+        if (roomPreview != null)
+        {
+            Navigation.NavigateTo($"/room/{roomPreview.Id}");
+        }
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+        var parts = name.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return name.Length >= 2
+            ? name.Substring(0, 2).ToUpper()
+            : name[0].ToString().ToUpper();
+    }
+}

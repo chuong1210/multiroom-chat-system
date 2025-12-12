@@ -4,113 +4,181 @@
 @inject AuthService AuthService
 @inject ApiService ApiService
 @inject NavigationManager Navigation
-@* @rendermode InteractiveServer *@
-@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>Rooms - Chat Room System</PageTitle>
 
 @if (isInitializing)
 {
-    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-        <div class="spinner-border" role="status">
-            <span class="visually-hidden">Đang khởi tạo...</span>
-        </div>
+    <!-- Loading Screen -->
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Đang tải dữ liệu...</p>
     </div>
-    return;
 }
-
-@if (AuthService.CurrentUser == null)
+else if (AuthService.CurrentUser == null)
 {
-    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-        <p>Đang chuyển hướng đến trang đăng nhập...</p>
+    <!-- Redirecting State -->
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Đang chuyển hướng...</p>
     </div>
-    return;
 }
-
-<div class="rooms-container">
-    <div class="rooms-header">
-        <h2>Chat Rooms</h2>
-        <div class="header-actions">
-            <span class="user-info">👋 @AuthService.CurrentUser.Username</span>
-            <button class="btn btn-primary" @onclick="ShowCreateRoomModal">+ Tạo Room</button>
-            <button class="btn btn-secondary" @onclick="LogoutAsync">Đăng xuất</button>
+else
+{
+    <div class="page-container">
+        <!-- Header Section -->
+        <div class="page-header">
+            <div class="header-title">
+                <h1>Danh sách phòng</h1>
+                <p class="subtitle">Khám phá và tham gia các cuộc trò chuyện</p>
+            </div>
+            <button class="btn-create" @onclick="ShowCreateRoomModal">
+                <i class="fa-solid fa-plus"></i> Tạo Room mới
+            </button>
         </div>
-    </div>
 
-    <div class="rooms-tabs">
-        <button class="tab-btn @(activeTab == "my" ? "active" : "")" @onclick='() => SwitchTab("my")'>
-            My Rooms
-        </button>
-        <button class="tab-btn @(activeTab == "public" ? "active" : "")" @onclick='() => SwitchTab("public")'>
-            Public Rooms
-        </button>
-    </div>
-
-    <div class="search-box">
-        <input type="text" @bind="searchQuery" @bind:event="oninput" placeholder="🔍 Tìm kiếm rooms..." class="form-control" />
-    </div>
-
-    <div class="rooms-list">
-        @if (isLoading)
-        {
-            <div class="text-center py-5">
-                <div class="spinner-border"></div>
+        <!-- Toolbar: Tabs & Search -->
+        <div class="toolbar-section">
+            <div class="tabs-pill">
+                <button class="tab-item @(activeTab == "my" ? "active" : "")" @onclick='() => SwitchTab("my")'>
+                    My Rooms
+                </button>
+                <button class="tab-item @(activeTab == "public" ? "active" : "")" @onclick='() => SwitchTab("public")'>
+                    Public Rooms
+                </button>
+                <div class="glider" style="@(activeTab == "public" ? "transform: translateX(100%);" : "transform: translateX(0);")"></div>
             </div>
-        }
-        else if (filteredRooms.Count == 0)
-        {
-            <div class="text-center py-5 text-muted">
-                <p>Không có room nào</p>
+
+            <div class="search-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text"
+                       value="@searchQuery"
+                       @oninput="@((e) => { searchQuery = e.Value?.ToString() ?? ""; FilterRooms(); })"
+                       placeholder="Tìm kiếm phòng theo tên, chủ đề..." />
             </div>
-        }
-        else
-        {
-            @foreach (var room in filteredRooms)
+        </div>
+
+        <!-- Rooms Grid -->
+        <div class="rooms-grid">
+            @if (isLoading)
             {
-                <div class="room-card" @onclick="() => JoinRoom(room.Id)">
-                    <div class="room-header">
-                        <h5>@room.Name</h5>
-                        @if (room.IsPrivate)
-                        {
-                            <span class="badge bg-warning">🔒 Private</span>
-                        }
-                    </div>
-                    <p class="room-description">@room.Description</p>
-                    <div class="room-footer">
-                        <span class="badge bg-info">📁 @room.Topic</span>
-                        <span class="text-muted">👥 @room.MemberIds.Count members (@room.ActiveMembersCount online)</span>
-                    </div>
+                <div class="grid-loader">
+                    <div class="spinner-border text-primary"></div>
                 </div>
             }
-        }
-    </div>
-</div>
+            else if (filteredRooms.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fa-regular fa-folder-open"></i>
+                    </div>
+                    <h3>Không tìm thấy phòng nào</h3>
+                    <p>Hãy thử tìm kiếm từ khóa khác hoặc tạo phòng mới.</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var room in filteredRooms)
+                {
+                    var isMember = room.MemberIds.Contains(AuthService.CurrentUser?.Id ?? "");
+                    var isJoining = joiningRooms.Contains(room.Id);
 
+                    <!-- Room Card -->
+                    <div class="room-card fade-in">
+                        <div class="card-gradient-bar"></div> <!-- Decorative Bar -->
+
+                        <div class="card-body">
+                            <div class="card-header-row">
+                                <h5 class="room-name" title="@room.Name">@room.Name</h5>
+                                @if (room.IsPrivate)
+                                {
+                                    <span class="badge private"><i class="fa-solid fa-lock"></i> Private</span>
+                                }
+                            </div>
+
+                            <p class="room-desc">@(string.IsNullOrEmpty(room.Description) ? "Chưa có mô tả cho phòng này." : room.Description)</p>
+
+                            <div class="room-meta">
+                                <div class="meta-item">
+                                    <i class="fa-solid fa-hashtag"></i>
+                                    <span>@room.Topic</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fa-solid fa-users"></i>
+                                    <span>@room.MemberIds.Count tv (@room.ActiveMembersCount online)</span>
+                                </div>
+                            </div>
+
+                            <div class="card-actions">
+                                @if (isMember)
+                                {
+                                    <button class="btn-action enter" @onclick="@(() => EnterRoom(room.Id))">
+                                        Chat ngay <i class="fa-solid fa-arrow-right"></i>
+                                    </button>
+                                }
+                                else if (activeTab == "public")
+                                {
+                                    <button class="btn-action join"
+                                            @onclick="@(() => JoinRoom(room.Id))"
+                                            disabled="@isJoining">
+                                        @if (isJoining)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <span><i class="fa-solid fa-plus"></i> Tham gia</span>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+<!-- Modern Modal -->
 @if (showCreateModal)
 {
-    <div class="modal-overlay" @onclick="HideCreateRoomModal">
-        <div class="modal-content" @onclick:stopPropagation="true">
-            <h4>Tạo Room Mới</h4>
+    <div class="modal-backdrop" @onclick="HideCreateRoomModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h4>Tạo Room Mới</h4>
+                <button class="close-btn" @onclick="HideCreateRoomModal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
             <EditForm Model="@createRoomModel" OnValidSubmit="@CreateRoomAsync">
-                <div class="mb-3">
-                    <label class="form-label">Tên Room</label>
-                    <InputText @bind-Value="createRoomModel.Name" class="form-control" />
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Tên phòng</label>
+                        <InputText @bind-Value="createRoomModel.Name" class="form-input" placeholder="VD: Nhóm lập trình C#" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Mô tả ngắn</label>
+                        <InputTextArea @bind-Value="createRoomModel.Description" class="form-input" rows="3" placeholder="Mô tả mục đích của phòng..." />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Chủ đề (Topic)</label>
+                        <InputText @bind-Value="createRoomModel.Topic" class="form-input" placeholder="VD: Tech, Game, Relax..." />
+                    </div>
+
+                    <div class="form-check-group">
+                        <InputCheckbox @bind-Value="createRoomModel.IsPrivate" id="isPrivate" class="custom-checkbox" />
+                        <label for="isPrivate">
+                            <span class="check-title">Phòng riêng tư (Private)</span>
+                            <span class="check-desc">Chỉ những người được mời mới có thể tham gia.</span>
+                        </label>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Mô tả</label>
-                    <InputTextArea @bind-Value="createRoomModel.Description" class="form-control" rows="3" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Chủ đề</label>
-                    <InputText @bind-Value="createRoomModel.Topic" class="form-control" />
-                </div>
-                <div class="mb-3 form-check">
-                    <InputCheckbox @bind-Value="createRoomModel.IsPrivate" class="form-check-input" id="isPrivate" />
-                    <label class="form-check-label" for="isPrivate">Private Room</label>
-                </div>
+
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="HideCreateRoomModal">Hủy</button>
-                    <button type="submit" class="btn btn-primary">Tạo Room</button>
+                    <button type="button" class="btn-ghost" @onclick="HideCreateRoomModal">Hủy bỏ</button>
+                    <button type="submit" class="btn-primary">Tạo Room</button>
                 </div>
             </EditForm>
         </div>
@@ -118,232 +186,484 @@
 }
 
 <style>
-    .rooms-container {
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: var(--spacing-xl);
-        min-height: 100vh;
-        animation: fadeIn 0.4s ease-out;
+    :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --bg-gray: #f3f4f6;
+        --text-dark: #1f2937;
+        --text-light: #6b7280;
+        --card-bg: #ffffff;
+        --radius: 12px;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
-    .rooms-header {
+    /* === Global Layout === */
+    .page-container {
+        padding: 0;
+        max-width: 100%;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    /* === Header === */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 30px;
+    }
+
+    .header-title h1 {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin: 0;
+    }
+
+    .subtitle {
+        color: var(--text-light);
+        margin: 5px 0 0 0;
+        font-size: 14px;
+    }
+
+    .btn-create {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+        .btn-create:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+    /* === Toolbar (Tabs & Search) === */
+    .toolbar-section {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: var(--spacing-2xl);
-        padding: var(--spacing-xl);
-        background: white;
-        border-radius: var(--radius-2xl);
-        box-shadow: var(--shadow-lg);
-    }
-
-        .rooms-header h2 {
-            margin: 0;
-            font-size: var(--font-size-3xl);
-            background: var(--bg-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-    .header-actions {
-        display: flex;
-        gap: var(--spacing-md);
-        align-items: center;
+        margin-bottom: 30px;
         flex-wrap: wrap;
+        gap: 20px;
     }
 
-    .user-info {
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-gray-700);
-        padding: var(--spacing-sm) var(--spacing-lg);
-        background: var(--color-gray-100);
-        border-radius: var(--radius-full);
+    /* Tabs Style */
+    .tabs-pill {
         display: flex;
-        align-items: center;
-        gap: var(--spacing-sm);
-    }
-
-    .rooms-tabs {
-        display: flex;
-        gap: var(--spacing-sm);
-        margin-bottom: var(--spacing-xl);
-        background: white;
-        padding: var(--spacing-sm);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-md);
-    }
-
-    .tab-btn {
-        flex: 1;
-        padding: var(--spacing-md) var(--spacing-xl);
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        border-radius: var(--radius-lg);
-        font-size: var(--font-size-base);
-        font-weight: var(--font-weight-medium);
-        color: var(--color-gray-600);
-        transition: all var(--transition-base);
         position: relative;
+        background: white;
+        padding: 5px;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border: 1px solid #e5e7eb;
     }
 
-        .tab-btn:hover {
-            background: var(--color-gray-100);
-            color: var(--color-gray-900);
-        }
-
-        .tab-btn.active {
-            background: var(--color-primary);
-            color: white;
-            box-shadow: var(--shadow-md);
-        }
-
-    .search-box {
-        margin-bottom: var(--spacing-xl);
+    .tab-item {
+        position: relative;
+        z-index: 2;
+        background: transparent;
+        border: none;
+        padding: 8px 24px;
+        font-weight: 600;
+        color: var(--text-light);
+        cursor: pointer;
+        transition: color 0.3s;
+        min-width: 120px;
     }
 
-        .search-box input {
-            font-size: var(--font-size-lg);
-            padding: var(--spacing-md) var(--spacing-lg);
-            box-shadow: var(--shadow-md);
+        .tab-item.active {
+            color: var(--primary);
         }
 
-    .rooms-list {
+    .glider {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        height: calc(100% - 10px);
+        width: calc(50% - 5px);
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 8px;
+        z-index: 1;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Search Style */
+    .search-wrapper {
+        position: relative;
+        flex: 1;
+        max-width: 400px;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-light);
+    }
+
+    .search-wrapper input {
+        width: 100%;
+        padding: 12px 12px 12px 40px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+        .search-wrapper input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+    /* === Grid & Cards === */
+    .rooms-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-        gap: var(--spacing-xl);
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 24px;
     }
 
     .room-card {
         background: white;
-        padding: var(--spacing-xl);
-        border-radius: var(--radius-2xl);
-        box-shadow: var(--shadow-md);
-        cursor: pointer;
-        transition: all var(--transition-base);
-        border: 2px solid transparent;
-        position: relative;
+        border-radius: var(--radius);
         overflow: hidden;
+        border: 1px solid #f0f0f0;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        transition: transform 0.2s, box-shadow 0.2s;
+        position: relative;
+        display: flex;
+        flex-direction: column;
     }
 
-        .room-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--bg-gradient);
-            opacity: 0;
-            transition: opacity var(--transition-base);
-        }
-
         .room-card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--shadow-xl);
-            border-color: var(--color-primary-light);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            border-color: rgba(99, 102, 241, 0.2);
         }
 
-            .room-card:hover::before {
-                opacity: 1;
-            }
+    .card-gradient-bar {
+        height: 6px;
+        background: linear-gradient(90deg, #6366f1, #a855f7);
+        width: 100%;
+    }
 
-    .room-header {
+    .card-body {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .card-header-row {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: var(--spacing-md);
-        gap: var(--spacing-sm);
+        margin-bottom: 8px;
     }
 
-        .room-header h5 {
-            margin: 0;
-            font-size: var(--font-size-xl);
-            font-weight: var(--font-weight-bold);
-            color: var(--color-gray-900);
-            flex: 1;
-        }
-
-    .room-description {
-        color: var(--color-gray-600);
-        margin-bottom: var(--spacing-lg);
-        min-height: 3rem;
-        line-height: var(--line-height-relaxed);
+    .room-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .room-footer {
+    .badge.private {
+        background: #fff1f2;
+        color: #e11d48;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-weight: 600;
+        white-space: nowrap;
+        margin-left: 8px;
+    }
+
+    .room-desc {
+        color: var(--text-light);
+        font-size: 14px;
+        line-height: 1.5;
+        margin-bottom: 20px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-height: 42px;
+    }
+
+    .room-meta {
         display: flex;
-        justify-content: space-between;
+        gap: 15px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: var(--text-light);
+    }
+
+    .meta-item {
+        display: flex;
         align-items: center;
-        gap: var(--spacing-md);
-        font-size: var(--font-size-sm);
-        padding-top: var(--spacing-md);
-        border-top: 1px solid var(--color-gray-200);
+        gap: 6px;
+        background: #f9fafb;
+        padding: 4px 8px;
+        border-radius: 6px;
     }
 
-        .room-footer .badge {
-            font-size: var(--font-size-xs);
-            padding: 0.375rem 0.75rem;
+        .meta-item i {
+            color: var(--primary);
         }
 
-    @@media (max-width: 768px) {
-        .rooms-container {
-            padding: var(--spacing-md);
-        }
-
-        .rooms-header {
-            flex-direction: column;
-            gap: var(--spacing-md);
-            align-items: flex-start;
-        }
-
-        .header-actions {
-            width: 100%;
-            justify-content: space-between;
-        }
-
-        .rooms-list {
-            grid-template-columns: 1fr;
-        }
+    .card-actions {
+        margin-top: auto;
     }
 
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+    .btn-action {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
         display: flex;
         justify-content: center;
         align-items: center;
+        gap: 8px;
+    }
+
+        .btn-action.enter {
+            background: #eff6ff;
+            color: var(--primary);
+        }
+
+            .btn-action.enter:hover {
+                background: #e0e7ff;
+            }
+
+        .btn-action.join {
+            background: var(--text-dark);
+            color: white;
+        }
+
+            .btn-action.join:hover {
+                background: #000;
+            }
+
+        .btn-action:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+    /* === Empty State === */
+    .empty-state {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: var(--radius);
+        border: 2px dashed #e5e7eb;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        color: #d1d5db;
+        margin-bottom: 15px;
+    }
+
+    .empty-state h3 {
+        color: var(--text-dark);
+        margin-bottom: 8px;
+    }
+
+    .empty-state p {
+        color: var(--text-light);
+    }
+
+    /* === Modal === */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
         z-index: 1000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
         animation: fadeIn 0.2s ease-out;
     }
 
-    .modal-content {
+    .modal-panel {
         background: white;
-        padding: var(--spacing-2xl);
-        border-radius: var(--radius-2xl);
-        box-shadow: var(--shadow-2xl);
-        max-width: 500px;
         width: 90%;
-        animation: slideUp 0.3s ease-out;
+        max-width: 500px;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
     }
 
-        .modal-content h4 {
-            margin-bottom: var(--spacing-xl);
-            color: var(--color-gray-900);
+    .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .modal-header h4 {
+            margin: 0;
+            color: var(--text-dark);
+            font-weight: 700;
         }
 
+    .close-btn {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        cursor: pointer;
+        font-size: 18px;
+        padding: 4px;
+    }
+
+        .close-btn:hover {
+            color: var(--text-dark);
+        }
+
+    .modal-body {
+        padding: 24px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-dark);
+        }
+
+    .form-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s;
+        font-size: 14px;
+    }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+    .form-check-group {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px;
+        background: #f9fafb;
+        border-radius: 8px;
+    }
+
+    .custom-checkbox {
+        margin-top: 4px;
+        width: 16px;
+        height: 16px;
+        accent-color: var(--primary);
+    }
+
+    .check-title {
+        display: block;
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--text-dark);
+    }
+
+    .check-desc {
+        font-size: 12px;
+        color: var(--text-light);
+    }
+
     .modal-footer {
+        padding: 16px 24px;
+        background: #f9fafb;
         display: flex;
         justify-content: flex-end;
-        gap: var(--spacing-md);
-        margin-top: var(--spacing-xl);
-        padding-top: var(--spacing-lg);
-        border-top: 1px solid var(--color-gray-200);
+        gap: 12px;
+    }
+
+    .btn-ghost {
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-light);
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-ghost:hover {
+            background: #e5e7eb;
+            color: var(--text-dark);
+        }
+
+    .btn-primary {
+        padding: 8px 20px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+    /* === Loading === */
+    .loading-container {
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+        color: var(--text-light);
+    }
+
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #e5e7eb;
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    /* Animations */
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     @@keyframes fadeIn {
@@ -367,6 +687,35 @@
             transform: translateY(0);
         }
     }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .toolbar-section {
+            flex-direction: column-reverse;
+            align-items: stretch;
+        }
+
+        .search-wrapper {
+            max-width: 100%;
+        }
+
+        .tabs-pill {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .tab-item {
+            flex: 1;
+            min-width: auto;
+            padding: 8px 0;
+        }
+    }
 </style>
 
 @code {
@@ -375,58 +724,32 @@
     private string activeTab = "my";
     private string searchQuery = "";
     private bool isLoading = false;
-    private bool isInitializing = true; // ✅ Flag để track initialization state
+    private bool isInitializing = true;
     private bool showCreateModal = false;
     private CreateRoomDto createRoomModel = new();
+    private HashSet<string> joiningRooms = new();
 
     protected override async Task OnInitializedAsync()
     {
-        Console.WriteLine("🔵 [Rooms] OnInitializedAsync START");
-
         try
         {
-            // ✅ Đảm bảo AuthService được initialize
             await AuthService.InitializeAsync();
-
-            Console.WriteLine($"🔵 [Rooms] Auth initialized");
-            Console.WriteLine($"🔵 [Rooms] IsAuthenticated: {AuthService.IsAuthenticated}");
-            Console.WriteLine($"🔵 [Rooms] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
-
-            // ✅ Đợi một chút để đảm bảo state đã ổn định
-            await Task.Delay(100);
-
-            // ✅ Check authentication
             if (!AuthService.IsAuthenticated)
             {
-                Console.WriteLine("🔴 [Rooms] Not authenticated, redirecting to /login");
                 Navigation.NavigateTo("/login", forceLoad: true);
                 return;
             }
-
-            Console.WriteLine("🟢 [Rooms] User authenticated, loading rooms...");
-
-            // ✅ Load rooms
             await LoadRooms();
-
-            Console.WriteLine("🟢 [Rooms] Rooms loaded successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Rooms] Error in OnInitializedAsync: {ex.Message}");
-            Console.WriteLine($"🔴 [Rooms] Stack trace: {ex.StackTrace}");
+            Console.WriteLine($"Error: {ex.Message}");
         }
         finally
         {
-            // ✅ Kết thúc initialization
             isInitializing = false;
             StateHasChanged();
-            Console.WriteLine("🔵 [Rooms] OnInitializedAsync END");
         }
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        FilterRooms();
     }
 
     private async Task LoadRooms()
@@ -436,24 +759,16 @@
 
         try
         {
-            Console.WriteLine($"🔵 [Rooms] LoadRooms - activeTab: {activeTab}");
-
             if (activeTab == "my")
-            {
                 rooms = await ApiService.GetMyRoomsAsync();
-                Console.WriteLine($"🟢 [Rooms] Loaded {rooms.Count} 'my' rooms");
-            }
             else
-            {
                 rooms = await ApiService.GetPublicRoomsAsync();
-                Console.WriteLine($"🟢 [Rooms] Loaded {rooms.Count} 'public' rooms");
-            }
 
             FilterRooms();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Rooms] Error loading rooms: {ex.Message}");
+            Console.WriteLine($"Error loading rooms: {ex.Message}");
             rooms = new List<RoomDto>();
             filteredRooms = new List<RoomDto>();
         }
@@ -484,7 +799,6 @@
 
     private async Task SwitchTab(string tab)
     {
-        Console.WriteLine($"🔵 [Rooms] Switching tab from '{activeTab}' to '{tab}'");
         activeTab = tab;
         searchQuery = "";
         await LoadRooms();
@@ -507,37 +821,55 @@
     {
         try
         {
-            Console.WriteLine($"🔵 [Rooms] Creating room: {createRoomModel.Name}");
-
             var room = await ApiService.CreateRoomAsync(createRoomModel);
-
             if (room != null)
             {
-                Console.WriteLine($"🟢 [Rooms] Room created successfully: {room.Id}");
                 showCreateModal = false;
                 await LoadRooms();
                 Navigation.NavigateTo($"/room/{room.Id}");
             }
-            else
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating room: {ex.Message}");
+        }
+    }
+
+    private async Task JoinRoom(string roomId)
+    {
+        if (joiningRooms.Contains(roomId)) return;
+
+        joiningRooms.Add(roomId);
+        StateHasChanged();
+
+        try
+        {
+            var success = await ApiService.JoinRoomAsync(roomId);
+            if (success)
             {
-                Console.WriteLine("🔴 [Rooms] Failed to create room - returned null");
+                await LoadRooms();
+                Navigation.NavigateTo($"/room/{roomId}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Rooms] Error creating room: {ex.Message}");
+            Console.WriteLine($"Error joining room: {ex.Message}");
+        }
+        finally
+        {
+            joiningRooms.Remove(roomId);
+            StateHasChanged();
         }
     }
 
-    private void JoinRoom(string roomId)
+    private void EnterRoom(string roomId)
     {
-        Console.WriteLine($"🔵 [Rooms] Joining room: {roomId}");
         Navigation.NavigateTo($"/room/{roomId}");
     }
 
+    // Note: Logout button removed from UI (moved to Sidebar), logic kept for safety
     private async Task LogoutAsync()
     {
-        Console.WriteLine("🔵 [Rooms] Logging out...");
         await AuthService.LogoutAsync();
         Navigation.NavigateTo("/login", forceLoad: true);
     }

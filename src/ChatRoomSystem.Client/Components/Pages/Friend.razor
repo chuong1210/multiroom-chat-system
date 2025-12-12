@@ -6,77 +6,96 @@
 @inject NavigationManager Navigation
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<PageTitle>Friends - Chat Room System</PageTitle>
+<PageTitle>Bạn bè - Chat Room System</PageTitle>
 
-<div class="friends-container">
-    <!-- Header -->
+<div class="page-container">
+    <!-- Header Section -->
     <div class="page-header">
-        <h2>👥 Friends</h2>
-        <button class="btn btn-primary" @onclick="ShowSearchModal">
-            <span>➕ Add Friend</span>
+        <div class="header-content">
+            <h1>Kết nối bạn bè</h1>
+            <p class="subtitle">Quản lý danh sách bạn bè và lời mời kết bạn</p>
+        </div>
+        <button class="btn-add-friend" @onclick="ShowSearchModal">
+            <i class="fa-solid fa-user-plus"></i> Thêm bạn mới
         </button>
     </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-        <button class="tab @(activeTab == "friends" ? "active" : "")" @onclick='() => SwitchTab("friends")'>
-            My Friends (@friends.Count)
-        </button>
-        <button class="tab @(activeTab == "requests" ? "active" : "")" @onclick='() => SwitchTab("requests")'>
-            Friend Requests (@friendRequests.Count)
-        </button>
+    <!-- Tabs Navigation -->
+    <div class="tabs-container">
+        <div class="tabs-pill">
+            <button class="tab-item @(activeTab == "friends" ? "active" : "")" @onclick='() => SwitchTab("friends")'>
+                <i class="fa-solid fa-users"></i> Danh sách bạn bè
+                <span class="badge-count">@friends.Count</span>
+            </button>
+            <button class="tab-item @(activeTab == "requests" ? "active" : "")" @onclick='() => SwitchTab("requests")'>
+                <i class="fa-solid fa-envelope-open-text"></i> Lời mời kết bạn
+                @if (friendRequests.Count > 0)
+                {
+                    <span class="badge-count active">@friendRequests.Count</span>
+                }
+            </button>
+            <div class="glider" style="@(activeTab == "requests" ? "transform: translateX(100%);" : "transform: translateX(0);")"></div>
+        </div>
     </div>
 
-    <!-- Content -->
-    <div class="content">
+    <!-- Main Content Area -->
+    <div class="content-area">
         @if (isLoading)
         {
             <div class="loading-state">
-                <div class="spinner-border"></div>
-                <p>Loading...</p>
+                <div class="spinner"></div>
+                <p>Đang tải dữ liệu...</p>
             </div>
         }
         else if (activeTab == "friends")
         {
-            <!-- Friends List -->
+            <!-- Friends Grid -->
             @if (friends.Count == 0)
             {
-                <div class="empty-state">
-                    <div class="empty-icon">😢</div>
-                    <h3>No friends yet</h3>
-                    <p>Start by searching and adding friends!</p>
-                    <button class="btn btn-primary" @onclick="ShowSearchModal">Add Friend</button>
+                <div class="empty-state fade-in">
+                    <div class="empty-img">
+                        <i class="fa-solid fa-user-group"></i>
+                    </div>
+                    <h3>Chưa có bạn bè nào</h3>
+                    <p>Hãy tìm kiếm và kết bạn để bắt đầu trò chuyện nhé!</p>
+                    <button class="btn-ghost" @onclick="ShowSearchModal">Tìm bạn ngay</button>
                 </div>
             }
             else
             {
-                <div class="friends-grid">
+                <div class="friends-grid fade-in">
                     @foreach (var friend in friends)
                     {
                         <div class="friend-card">
-                            <div class="friend-avatar">
-                                @GetInitials(friend.Username)
-                                <span class="status-dot @(friend.IsOnline ? "online" : "offline")"></span>
+                            <div class="friend-header">
+                                <div class="avatar-wrapper">
+                                    <div class="avatar">@GetInitials(friend.Username)</div>
+                                    <span class="status-indicator @(friend.IsOnline ? "online" : "offline")"
+                                          title="@(friend.IsOnline ? "Online" : "Offline")"></span>
+                                </div>
+                                <div class="friend-details">
+                                    <h4 class="username">@friend.Username</h4>
+                                    <span class="last-seen">
+                                        @if (friend.IsOnline)
+                                        {
+                                            <span class="text-online">Đang hoạt động</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Online @GetRelativeTime(friend.LastSeen)</span>
+                                        }
+                                    </span>
+                                </div>
+                                <div class="more-options">
+                                    <button class="btn-icon danger" title="Xóa bạn" @onclick="() => RemoveFriend(friend.Id)">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="friend-info">
-                                <h4>@friend.Username</h4>
-                                <p class="status">
-                                    @if (friend.IsOnline)
-                                    {
-                                        <span class="online">● Online</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="offline">○ Last seen @GetRelativeTime(friend.LastSeen)</span>
-                                    }
-                                </p>
-                            </div>
+
                             <div class="friend-actions">
-                                <button class="btn btn-sm btn-primary" @onclick="() => StartChat(friend.Id)">
-                                    💬 Chat
-                                </button>
-                                <button class="btn btn-sm btn-danger" @onclick="() => RemoveFriend(friend.Id)">
-                                    🗑️
+                                <button class="btn-chat" @onclick="() => StartChat(friend.Id)">
+                                    <i class="fa-regular fa-comment-dots"></i> Nhắn tin
                                 </button>
                             </div>
                         </div>
@@ -86,34 +105,36 @@
         }
         else
         {
-            <!-- Friend Requests -->
+            <!-- Friend Requests List -->
             @if (friendRequests.Count == 0)
             {
-                <div class="empty-state">
-                    <div class="empty-icon">📭</div>
-                    <h3>No pending requests</h3>
-                    <p>You don't have any friend requests at the moment.</p>
+                <div class="empty-state fade-in">
+                    <div class="empty-img">
+                        <i class="fa-solid fa-inbox"></i>
+                    </div>
+                    <h3>Không có lời mời nào</h3>
+                    <p>Bạn chưa nhận được lời mời kết bạn nào mới.</p>
                 </div>
             }
             else
             {
-                <div class="requests-list">
+                <div class="requests-container fade-in">
                     @foreach (var request in friendRequests)
                     {
-                        <div class="request-card">
-                            <div class="request-avatar">
-                                @GetInitials(request.FromUsername)
-                            </div>
-                            <div class="request-info">
-                                <h4>@request.FromUsername</h4>
-                                <p class="request-time">@GetRelativeTime(request.CreatedAt)</p>
+                        <div class="request-item">
+                            <div class="request-left">
+                                <div class="avatar-small">@GetInitials(request.FromUsername)</div>
+                                <div class="request-info">
+                                    <span class="req-name">@request.FromUsername</span>
+                                    <span class="req-time">Đã gửi @GetRelativeTime(request.CreatedAt)</span>
+                                </div>
                             </div>
                             <div class="request-actions">
-                                <button class="btn btn-sm btn-success" @onclick="() => AcceptRequest(request.Id)">
-                                    ✓ Accept
+                                <button class="btn-accept" @onclick="() => AcceptRequest(request.Id)">
+                                    <i class="fa-solid fa-check"></i> Chấp nhận
                                 </button>
-                                <button class="btn btn-sm btn-danger" @onclick="() => RejectRequest(request.Id)">
-                                    ✕ Reject
+                                <button class="btn-reject" @onclick="() => RejectRequest(request.Id)">
+                                    <i class="fa-solid fa-xmark"></i> Xóa
                                 </button>
                             </div>
                         </div>
@@ -124,448 +145,619 @@
     </div>
 </div>
 
-<!-- Search Modal -->
+<!-- Modern Search Modal -->
 @if (showSearchModal)
 {
-    <div class="modal-overlay" @onclick="HideSearchModal">
-        <div class="modal-content" @onclick:stopPropagation="true">
+    <div class="modal-backdrop" @onclick="HideSearchModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <h3>🔍 Search Users</h3>
-                <button class="btn-close" @onclick="HideSearchModal">✕</button>
+                <h3><i class="fa-solid fa-search"></i> Tìm kiếm người dùng</h3>
+                <button class="btn-close" @onclick="HideSearchModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
+
             <div class="modal-body">
-                <div class="search-box">
+                <div class="search-input-wrapper">
+                    <i class="fa-solid fa-magnifying-glass"></i>
                     <input type="text"
-                           class="form-control"
-                           placeholder="Search by username or email..."
+                           placeholder="Nhập tên người dùng hoặc email..."
                            @bind="searchQuery"
                            @bind:event="oninput"
-                           @onkeyup="HandleSearch" />
+                           @onkeyup="HandleSearch"
+                           autoFocus />
                 </div>
 
-                @if (isSearching)
-                {
-                    <div class="text-center py-3">
-                        <div class="spinner-border spinner-border-sm"></div>
-                    </div>
-                }
-                else if (searchResults.Count > 0)
-                {
-                    <div class="search-results">
+                <div class="search-results-area">
+                    @if (isSearching)
+                    {
+                        <div class="mini-loader">
+                            <div class="spinner-sm"></div>
+                            <span>Đang tìm kiếm...</span>
+                        </div>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(searchQuery) && searchResults.Count == 0)
+                    {
+                        <div class="no-results">
+                            <i class="fa-regular fa-face-frown"></i>
+                            <p>Không tìm thấy người dùng nào.</p>
+                        </div>
+                    }
+                    else
+                    {
                         @foreach (var user in searchResults)
                         {
-                            <div class="search-result-item">
-                                <div class="user-avatar">@GetInitials(user.Username)</div>
-                                <div class="user-info">
-                                    <strong>@user.Username</strong>
-                                    <small>@user.Email</small>
+                            <div class="result-item">
+                                <div class="result-avatar">@GetInitials(user.Username)</div>
+                                <div class="result-info">
+                                    <div class="r-name">@user.Username</div>
+                                    <div class="r-email">@user.Email</div>
                                 </div>
-                                <button class="btn btn-sm btn-primary"
+                                <button class="btn-action-sm @(IsFriendOrRequested(user.Id) ? "disabled" : "primary")"
                                         @onclick="() => SendFriendRequest(user.Id)"
                                         disabled="@IsFriendOrRequested(user.Id)">
                                     @if (IsFriendOrRequested(user.Id))
                                     {
-                                        <span>✓ Added</span>
+                                        <span><i class="fa-solid fa-check"></i> Đã gửi</span>
                                     }
                                     else
                                     {
-                                        <span>+ Add</span>
+                                        <span><i class="fa-solid fa-user-plus"></i> Thêm</span>
                                     }
                                 </button>
                             </div>
                         }
-                    </div>
-                }
-                else if (!string.IsNullOrWhiteSpace(searchQuery))
-                {
-                    <div class="text-center text-muted py-3">
-                        <p>No users found</p>
-                    </div>
-                }
+                    }
+                </div>
             </div>
         </div>
     </div>
 }
 
 <style>
-    .friends-container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
+    :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --success: #10b981;
+        --danger: #ef4444;
+        --text-dark: #1f2937;
+        --text-gray: #6b7280;
+        --bg-gray: #f9fafb;
+        --card-radius: 16px;
     }
 
+    /* Layout */
+    .page-container {
+        padding: 0;
+        max-width: 1200px;
+        margin: 0 auto;
+        animation: fadeIn 0.4s ease-out;
+    }
+
+    /* Header */
     .page-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 2rem;
+        margin-bottom: 30px;
     }
 
-        .page-header h2 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin: 0;
+    .header-content h1 {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin: 0;
+    }
+
+    .subtitle {
+        color: var(--text-gray);
+        margin: 5px 0 0 0;
+        font-size: 14px;
+    }
+
+    .btn-add-friend {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    }
+
+        .btn-add-friend:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
         }
 
     /* Tabs */
-    .tabs {
+    .tabs-container {
+        margin-bottom: 30px;
+    }
+
+    .tabs-pill {
         display: flex;
-        gap: 1rem;
-        margin-bottom: 2rem;
-        border-bottom: 2px solid #e5e7eb;
+        position: relative;
+        background: white;
+        padding: 6px;
+        border-radius: 12px;
+        width: fit-content;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        border: 1px solid #e5e7eb;
     }
 
-    .tab {
-        padding: 1rem 2rem;
-        background: none;
+    .tab-item {
+        position: relative;
+        z-index: 2;
+        background: transparent;
         border: none;
-        border-bottom: 3px solid transparent;
-        color: #6b7280;
+        padding: 10px 24px;
         font-weight: 600;
+        color: var(--text-gray);
         cursor: pointer;
-        transition: all 0.2s;
+        transition: color 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
     }
 
-        .tab:hover {
-            color: #6366f1;
+        .tab-item.active {
+            color: var(--primary);
         }
 
-        .tab.active {
-            color: #6366f1;
-            border-bottom-color: #6366f1;
+    .glider {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        height: calc(100% - 12px);
+        width: calc(50% - 6px);
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 8px;
+        z-index: 1;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .badge-count {
+        background: #e5e7eb;
+        color: var(--text-gray);
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+    }
+
+        .badge-count.active {
+            background: var(--danger);
+            color: white;
         }
 
     /* Friends Grid */
     .friends-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
     }
 
     .friend-card {
         background: white;
-        padding: 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-radius: var(--card-radius);
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        border: 1px solid #f0f0f0;
+        transition: transform 0.2s, box-shadow 0.2s;
         display: flex;
-        align-items: center;
-        gap: 1rem;
-        transition: all 0.2s;
+        flex-direction: column;
+        gap: 15px;
     }
 
         .friend-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
         }
 
-    .friend-avatar {
+    .friend-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .avatar-wrapper {
         position: relative;
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+
+    .avatar {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #a78bfa, #8b5cf6);
         color: white;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 1.5rem;
-        flex-shrink: 0;
+        font-size: 18px;
     }
 
-    .status-dot {
+    .status-indicator {
         position: absolute;
-        bottom: 4px;
-        right: 4px;
-        width: 16px;
-        height: 16px;
+        bottom: 0;
+        right: 0;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
-        border: 3px solid white;
+        border: 2px solid white;
     }
 
-        .status-dot.online {
-            background: #10b981;
+        .status-indicator.online {
+            background: var(--success);
         }
 
-        .status-dot.offline {
-            background: #9ca3af;
+        .status-indicator.offline {
+            background: #d1d5db;
         }
 
-    .friend-info {
+    .friend-details {
         flex: 1;
+        overflow: hidden;
     }
 
-        .friend-info h4 {
-            margin: 0 0 0.25rem 0;
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #1f2937;
+    .username {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-dark);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .last-seen {
+        font-size: 12px;
+        color: var(--text-gray);
+    }
+
+    .text-online {
+        color: var(--success);
+        font-weight: 500;
+    }
+
+    .btn-icon {
+        background: transparent;
+        border: none;
+        color: #d1d5db;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 50%;
+        transition: all 0.2s;
+    }
+
+        .btn-icon:hover {
+            background: #f3f4f6;
         }
 
-        .friend-info .status {
-            font-size: 0.875rem;
-            margin: 0;
+        .btn-icon.danger:hover {
+            color: var(--danger);
+            background: #fee2e2;
         }
 
-            .friend-info .status .online {
-                color: #10b981;
-            }
-
-            .friend-info .status .offline {
-                color: #9ca3af;
-            }
-
-    .friend-actions {
+    .friend-actions .btn-chat {
+        width: 100%;
+        padding: 10px;
+        background: #eff6ff;
+        color: var(--primary);
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
         display: flex;
-        gap: 0.5rem;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
     }
+
+        .friend-actions .btn-chat:hover {
+            background: var(--primary);
+            color: white;
+        }
 
     /* Requests List */
-    .requests-list {
+    .requests-container {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 15px;
+        max-width: 800px;
     }
 
-    .request-card {
+    .request-item {
         background: white;
-        padding: 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 15px 20px;
+        border-radius: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #f0f0f0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .request-left {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 15px;
     }
 
-    .request-avatar {
-        width: 56px;
-        height: 56px;
+    .avatar-small {
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        background: #fbbf24;
         color: white;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 1.25rem;
-        flex-shrink: 0;
     }
 
     .request-info {
-        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 
-        .request-info h4 {
-            margin: 0 0 0.25rem 0;
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #1f2937;
-        }
+    .req-name {
+        font-weight: 600;
+        color: var(--text-dark);
+    }
 
-    .request-time {
-        font-size: 0.875rem;
-        color: #9ca3af;
-        margin: 0;
+    .req-time {
+        font-size: 12px;
+        color: var(--text-gray);
     }
 
     .request-actions {
         display: flex;
-        gap: 0.5rem;
+        gap: 10px;
     }
 
-    /* Empty State */
-    .empty-state {
-        text-align: center;
-        padding: 4rem 2rem;
-    }
-
-    .empty-icon {
-        font-size: 5rem;
-        margin-bottom: 1rem;
-    }
-
-    .empty-state h3 {
-        font-size: 1.5rem;
+    .btn-accept, .btn-reject {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
         font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 0.5rem;
+        cursor: pointer;
+        border: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    .empty-state p {
-        color: #6b7280;
-        margin-bottom: 2rem;
+    .btn-accept {
+        background: var(--success);
+        color: white;
     }
 
-    /* Loading State */
-    .loading-state {
-        text-align: center;
-        padding: 4rem 2rem;
+        .btn-accept:hover {
+            background: #059669;
+        }
+
+    .btn-reject {
+        background: #f3f4f6;
+        color: var(--text-dark);
     }
+
+        .btn-reject:hover {
+            background: #e5e7eb;
+        }
 
     /* Modal */
-    .modal-overlay {
+    .modal-backdrop {
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+        inset: 0;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
         display: flex;
         justify-content: center;
-        align-items: center;
-        z-index: 1000;
+        align-items: flex-start;
+        padding-top: 100px;
         animation: fadeIn 0.2s;
     }
 
-    .modal-content {
+    .modal-panel {
         background: white;
-        border-radius: 20px;
-        max-width: 600px;
-        width: 90%;
-        max-height: 80vh;
-        display: flex;
-        flex-direction: column;
-        animation: slideUp 0.3s;
+        width: 100%;
+        max-width: 500px;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        animation: slideDown 0.3s;
+        overflow: hidden;
     }
 
     .modal-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid #f0f0f0;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1.5rem;
-        border-bottom: 1px solid #e5e7eb;
+        background: #fafafa;
     }
 
         .modal-header h3 {
             margin: 0;
-            font-size: 1.5rem;
-            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-dark);
         }
 
     .btn-close {
         background: none;
         border: none;
-        font-size: 1.5rem;
-        color: #9ca3af;
+        color: var(--text-gray);
         cursor: pointer;
-        padding: 0;
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        transition: all 0.2s;
+        font-size: 16px;
     }
 
-        .btn-close:hover {
-            background: #f3f4f6;
-            color: #1f2937;
+    .modal-body {
+        padding: 20px;
+    }
+
+    .search-input-wrapper {
+        position: relative;
+        margin-bottom: 20px;
+    }
+
+        .search-input-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-gray);
         }
 
-    .modal-body {
-        padding: 1.5rem;
+        .search-input-wrapper input {
+            width: 100%;
+            padding: 12px 12px 12px 40px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+            .search-input-wrapper input:focus {
+                border-color: var(--primary);
+            }
+
+    .search-results-area {
+        max-height: 300px;
         overflow-y: auto;
     }
 
-    .search-box {
-        margin-bottom: 1.5rem;
-    }
-
-    .search-results {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-
-    .search-result-item {
+    .result-item {
         display: flex;
         align-items: center;
-        gap: 1rem;
-        padding: 1rem;
-        border-radius: 12px;
-        background: #f9fafb;
-        transition: all 0.2s;
+        padding: 10px;
+        border-radius: 8px;
+        transition: background 0.2s;
     }
 
-        .search-result-item:hover {
-            background: #f3f4f6;
+        .result-item:hover {
+            background: #f9fafb;
         }
 
-    .user-avatar {
-        width: 48px;
-        height: 48px;
+    .result-avatar {
+        width: 36px;
+        height: 36px;
+        background: #ddd;
         border-radius: 50%;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
-        color: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 700;
-        flex-shrink: 0;
+        font-weight: 600;
+        margin-right: 12px;
+        color: #555;
     }
 
-    .user-info {
+    .result-info {
         flex: 1;
-        display: flex;
-        flex-direction: column;
     }
 
-        .user-info strong {
-            color: #1f2937;
-            font-size: 1rem;
-        }
+    .r-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--text-dark);
+    }
 
-        .user-info small {
-            color: #6b7280;
-            font-size: 0.875rem;
-        }
+    .r-email {
+        font-size: 12px;
+        color: var(--text-gray);
+    }
 
-    /* Buttons */
-    .btn {
-        padding: 0.75rem 1.5rem;
-        border-radius: 12px;
+    .btn-action-sm {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
         font-weight: 600;
         border: none;
         cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 4px;
     }
 
-    .btn-primary {
-        background: #6366f1;
-        color: white;
-    }
-
-        .btn-primary:hover {
-            background: #4f46e5;
-            transform: translateY(-2px);
+        .btn-action-sm.primary {
+            background: var(--primary);
+            color: white;
         }
 
-    .btn-success {
-        background: #10b981;
-        color: white;
-    }
-
-        .btn-success:hover {
-            background: #059669;
+        .btn-action-sm.disabled {
+            background: #e5e7eb;
+            color: var(--text-gray);
+            cursor: default;
         }
 
-    .btn-danger {
-        background: #ef4444;
-        color: white;
+    /* Empty States & Loading */
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: var(--text-gray);
     }
 
-        .btn-danger:hover {
-            background: #dc2626;
+    .empty-img {
+        font-size: 48px;
+        color: #e5e7eb;
+        margin-bottom: 15px;
+    }
+
+    .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 15px;
+        font-weight: 600;
+    }
+
+        .btn-ghost:hover {
+            background: #eff6ff;
         }
 
-    .btn-sm {
-        padding: 0.5rem 1rem;
-        font-size: 0.875rem;
+    .loading-state, .mini-loader, .no-results {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        color: var(--text-gray);
+        gap: 10px;
+    }
+
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    .spinner-sm {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e5e7eb;
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     @@keyframes fadeIn {
@@ -578,10 +770,10 @@
         }
     }
 
-    @@keyframes slideUp {
+    @@keyframes slideDown {
         from {
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(-20px);
         }
 
         to {
@@ -590,18 +782,35 @@
         }
     }
 
+    /* Responsive */
     @@media (max-width: 768px) {
-        .friends-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .friend-card {
+        .page-header {
             flex-direction: column;
-            text-align: center;
+            align-items: flex-start;
+            gap: 15px;
         }
 
-        .friend-actions {
+        .tabs-pill {
             width: 100%;
+        }
+
+        .tab-item {
+            flex: 1;
+            justify-content: center;
+        }
+
+        .request-item {
+            flex-direction: column;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .request-actions {
+            width: 100%;
+        }
+
+        .btn-accept, .btn-reject {
+            flex: 1;
             justify-content: center;
         }
     }
@@ -722,9 +931,12 @@
 
     private async Task RemoveFriend(string friendId)
     {
-        // TODO: Implement remove friend
+        // TODO: Implement remove friend backend call if available
         // await ApiService.RemoveFriendAsync(friendId);
-        await LoadData();
+
+        // Mock remove for UI update
+        friends.RemoveAll(f => f.Id == friendId);
+        StateHasChanged();
     }
 
     private void StartChat(string friendId)
@@ -734,31 +946,19 @@
 
     private string GetInitials(string? username)
     {
-        if (string.IsNullOrEmpty(username))
-            return "?";
-
+        if (string.IsNullOrEmpty(username)) return "?";
         var parts = username.Split(' ');
-        if (parts.Length >= 2)
-            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
-
-        return username.Length >= 2
-            ? username.Substring(0, 2).ToUpper()
-            : username[0].ToString().ToUpper();
+        if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return username.Length >= 2 ? username.Substring(0, 2).ToUpper() : username[0].ToString().ToUpper();
     }
 
     private string GetRelativeTime(DateTime dateTime)
     {
         var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
-
-        if (timeSpan.TotalMinutes < 1)
-            return "just now";
-        if (timeSpan.TotalMinutes < 60)
-            return $"{(int)timeSpan.TotalMinutes}m ago";
-        if (timeSpan.TotalHours < 24)
-            return $"{(int)timeSpan.TotalHours}h ago";
-        if (timeSpan.TotalDays < 7)
-            return $"{(int)timeSpan.TotalDays}d ago";
-
-        return dateTime.ToString("MMM dd");
+        if (timeSpan.TotalMinutes < 1) return "vừa xong";
+        if (timeSpan.TotalMinutes < 60) return $"{(int)timeSpan.TotalMinutes} phút trước";
+        if (timeSpan.TotalHours < 24) return $"{(int)timeSpan.TotalHours} giờ trước";
+        if (timeSpan.TotalDays < 7) return $"{(int)timeSpan.TotalDays} ngày trước";
+        return dateTime.ToString("dd/MM/yyyy");
     }
 }

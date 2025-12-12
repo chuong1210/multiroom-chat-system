@@ -21,14 +21,17 @@ public class FriendsController : ControllerBase
     private readonly ChatRoomDbContext _dbContext;
     private readonly WebSocketConnectionManager _wsManager;
     private readonly ILogger<FriendsController> _logger;
+    private readonly NotificationService _notificationService;
 
     public FriendsController(
         ChatRoomDbContext dbContext,
         WebSocketConnectionManager wsManager,
+        NotificationService notificationService, // ✅ Add this
         ILogger<FriendsController> logger)
     {
         _dbContext = dbContext;
         _wsManager = wsManager;
+        _notificationService = notificationService; // ✅ Add this
         _logger = logger;
     }
 
@@ -128,6 +131,10 @@ public class FriendsController : ControllerBase
 
         _logger.LogInformation($"Friend request sent from {userId} to {model.ToUserId}");
 
+        // ✅ Create notification
+        await _notificationService.CreateFriendRequestNotificationAsync(
+            model.ToUserId,
+            currentUser?.UserName ?? "Someone");
         // Send notification via WebSocket
         await _wsManager.SendMessageAsync(model.ToUserId, new WebSocketMessage
         {
@@ -227,6 +234,13 @@ public class FriendsController : ControllerBase
             };
 
             _dbContext.Friendships.Add(friendship);
+
+            // ✅ Create notification
+            var currentUser = await _dbContext.Users.FindAsync(userId);
+            await _notificationService.CreateFriendAcceptedNotificationAsync(
+                request.FromUserId,
+                currentUser?.UserName ?? "Someone",
+                userId);
         }
 
         await _dbContext.SaveChangesAsync();

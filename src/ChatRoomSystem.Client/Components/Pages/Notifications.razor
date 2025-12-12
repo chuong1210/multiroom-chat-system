@@ -588,29 +588,8 @@
     }
 </style>
 
+<!-- HTML giữ nguyên -->
 @code {
-    private enum NotificationType
-    {
-        FriendRequest,
-        FriendAccepted,
-        NewMessage,
-        RoomInvite,
-        Mention,
-        System
-    }
-
-    private class NotificationDto
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public NotificationType Type { get; set; }
-        public string Title { get; set; } = "";
-        public string Message { get; set; } = "";
-        public string? ActionText { get; set; }
-        public string? ActionUrl { get; set; }
-        public bool IsRead { get; set; }
-        public DateTime CreatedAt { get; set; }
-    }
-
     private List<NotificationDto> notifications = new();
     private List<NotificationDto> filteredNotifications = new();
     private string activeFilter = "all";
@@ -638,78 +617,19 @@
 
         try
         {
-            // TODO: Load from API
-            // notifications = await ApiService.GetNotificationsAsync();
+            Console.WriteLine("🔵 [Notifications] Loading notifications...");
 
-            // Mock data
-            await Task.Delay(800);
+            // ✅ Load từ API
+            notifications = await ApiService.GetNotificationsAsync();
 
-            notifications = new List<NotificationDto>
-            {
-                new NotificationDto
-                {
-                    Type = NotificationType.FriendRequest,
-                    Title = "New friend request",
-                    Message = "Alice Johnson wants to be your friend",
-                    ActionText = "View request",
-                    ActionUrl = "/friends",
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow.AddMinutes(-10)
-                },
-                new NotificationDto
-                {
-                    Type = NotificationType.FriendAccepted,
-                    Title = "Friend request accepted",
-                    Message = "Bob Smith accepted your friend request",
-                    ActionText = "Send message",
-                    ActionUrl = "/chat/user2",
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow.AddHours(-1)
-                },
-                new NotificationDto
-                {
-                    Type = NotificationType.NewMessage,
-                    Title = "New message from Charlie",
-                    Message = "Hey! Are you free for a call?",
-                    ActionText = "Reply",
-                    ActionUrl = "/chat/user3",
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow.AddHours(-2)
-                },
-                new NotificationDto
-                {
-                    Type = NotificationType.RoomInvite,
-                    Title = "Room invitation",
-                    Message = "You've been invited to join 'Project Alpha' room",
-                    ActionText = "View room",
-                    ActionUrl = "/rooms",
-                    IsRead = true,
-                    CreatedAt = DateTime.UtcNow.AddHours(-5)
-                },
-                new NotificationDto
-                {
-                    Type = NotificationType.Mention,
-                    Title = "You were mentioned",
-                    Message = "David mentioned you in 'Design Team' room",
-                    ActionText = "View message",
-                    ActionUrl = "/room/room1",
-                    IsRead = true,
-                    CreatedAt = DateTime.UtcNow.AddDays(-1)
-                },
-                new NotificationDto
-                {
-                    Type = NotificationType.System,
-                    Title = "System update",
-                    Message = "New features are now available! Check out video calling and screen sharing.",
-                    ActionText = null,
-                    ActionUrl = null,
-                    IsRead = true,
-                    CreatedAt = DateTime.UtcNow.AddDays(-2)
-                }
-            };
+            Console.WriteLine($"🟢 [Notifications] Loaded {notifications.Count} notifications");
 
             UpdateUnreadCount();
             FilterNotifications();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔴 [Notifications] Error: {ex.Message}");
         }
         finally
         {
@@ -731,7 +651,8 @@
             "unread" => notifications.Where(n => !n.IsRead).ToList(),
             "friends" => notifications.Where(n =>
                 n.Type == NotificationType.FriendRequest ||
-                n.Type == NotificationType.FriendAccepted).ToList(),
+                n.Type == NotificationType.FriendAccepted ||
+                n.Type == NotificationType.FriendRejected).ToList(),
             "rooms" => notifications.Where(n =>
                 n.Type == NotificationType.RoomInvite).ToList(),
             "mentions" => notifications.Where(n =>
@@ -749,23 +670,44 @@
 
     private async Task MarkAllAsRead()
     {
-        // TODO: Call API to mark all as read
-        foreach (var notification in notifications)
-        {
-            notification.IsRead = true;
-        }
+        Console.WriteLine("🔵 [Notifications] Marking all as read...");
 
-        UpdateUnreadCount();
-        FilterNotifications();
+        // ✅ Call API
+        var success = await ApiService.MarkAllNotificationsAsReadAsync();
+
+        if (success)
+        {
+            foreach (var notification in notifications)
+            {
+                notification.IsRead = true;
+            }
+
+            UpdateUnreadCount();
+            FilterNotifications();
+
+            Console.WriteLine("🟢 [Notifications] All marked as read");
+        }
+        else
+        {
+            Console.WriteLine("🔴 [Notifications] Failed to mark all as read");
+        }
     }
 
     private async Task HandleNotificationClick(NotificationDto notification)
     {
         if (!notification.IsRead)
         {
-            notification.IsRead = true;
-            UpdateUnreadCount();
-            // TODO: Call API to mark as read
+            Console.WriteLine($"🔵 [Notifications] Marking {notification.Id} as read...");
+
+            // ✅ Call API
+            var success = await ApiService.MarkNotificationAsReadAsync(notification.Id);
+
+            if (success)
+            {
+                notification.IsRead = true;
+                UpdateUnreadCount();
+                Console.WriteLine("🟢 [Notifications] Marked as read");
+            }
         }
 
         if (!string.IsNullOrEmpty(notification.ActionUrl))
@@ -784,10 +726,23 @@
 
     private async Task DismissNotification(string id)
     {
-        // TODO: Call API to dismiss notification
-        notifications.RemoveAll(n => n.Id == id);
-        UpdateUnreadCount();
-        FilterNotifications();
+        Console.WriteLine($"🔵 [Notifications] Dismissing {id}...");
+
+        // ✅ Call API
+        var success = await ApiService.DismissNotificationAsync(id);
+
+        if (success)
+        {
+            notifications.RemoveAll(n => n.Id == id);
+            UpdateUnreadCount();
+            FilterNotifications();
+
+            Console.WriteLine("🟢 [Notifications] Dismissed");
+        }
+        else
+        {
+            Console.WriteLine("🔴 [Notifications] Failed to dismiss");
+        }
     }
 
     private string GetNotificationIcon(NotificationType type)
@@ -796,13 +751,17 @@
         {
             NotificationType.FriendRequest => "👋",
             NotificationType.FriendAccepted => "✨",
+            NotificationType.FriendRejected => "❌",
             NotificationType.NewMessage => "💬",
             NotificationType.RoomInvite => "🏠",
             NotificationType.Mention => "📢",
+            NotificationType.TaskAssigned => "📋",
+            NotificationType.TaskUpdated => "✏️",
             NotificationType.System => "⚙️",
             _ => "🔔"
         };
     }
+   
 
     private string GetEmptyStateTitle()
     {

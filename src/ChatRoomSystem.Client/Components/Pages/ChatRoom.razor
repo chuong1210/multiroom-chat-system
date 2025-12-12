@@ -1,150 +1,404 @@
+<!-- ChatRoomSystem.Client/Pages/Room.razor -->
 @page "/room/{RoomId}"
 @using ChatRoomSystem.Shared.Models
 @using ChatRoomSystem.Client.Services
+@using ChatRoomSystem.Client.Components
 @inject AuthService AuthService
 @inject ApiService ApiService
 @inject WebSocketService WebSocketService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @implements IAsyncDisposable
-@* @rendermode InteractiveServer *@
-@* @rendermode @(new InteractiveServerRenderMode(prerender: false)) *@
 
 <PageTitle>@roomName - Chat Room</PageTitle>
 
 @if (isInitializing)
 {
-    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-        <div class="spinner-border" role="status">
-            <span class="visually-hidden">Đang khởi tạo...</span>
-        </div>
-    </div>
-    return;
-}
-
-@if (AuthService.CurrentUser == null)
-{
-    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-        <p>Đang chuyển hướng đến trang đăng nhập...</p>
+    <div class="loading-screen">
+        <div class="spinner-border"></div>
+        <p>Loading room...</p>
     </div>
     return;
 }
 
 @if (room == null)
 {
-    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-        <div class="spinner-border" role="status">
-            <span class="visually-hidden">Đang tải phòng chat...</span>
-        </div>
+    <div class="loading-screen">
+        <div class="spinner-border"></div>
+        <p>Room not found...</p>
     </div>
     return;
 }
 
-<div class="chat-room-container">
+<div class="chat-room-container" style="@GetBackgroundStyle()">
     <!-- Header -->
     <div class="room-header">
-        <button class="btn btn-link" @onclick="BackToRooms">← Back</button>
+        <button class="btn-back" @onclick="BackToRooms">
+            <span>←</span>
+            <span>Back</span>
+        </button>
+
         <div class="room-info">
-            <h4>@room.Name</h4>
-            <small class="text-muted">@room.Topic | @room.MemberIds.Count members</small>
-        </div>
-        <div class="connection-status">
-            @if (isConnected)
+            @if (!string.IsNullOrEmpty(room.AvatarUrl))
             {
-                <span class="badge bg-success">● Connected</span>
+                <img src="@room.AvatarUrl" alt="Avatar" class="room-avatar" />
             }
             else
             {
-                <span class="badge bg-danger">○ Disconnected</span>
+                <div class="room-avatar room-avatar-placeholder">
+                    @GetInitials(room.Name)
+                </div>
             }
+
+            <div class="room-details">
+                <h4>@room.Name</h4>
+                <small>@room.Topic | @room.CurrentMembersCount members</small>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <button class="btn-icon" @onclick="ShowMembers" title="Members">
+                <span>👥</span>
+                @if (room.CurrentMembersCount > 0)
+                {
+                    <span class="badge-count">@room.CurrentMembersCount</span>
+                }
+            </button>
+
+            @if (room.IsAdmin && room.RequireApproval)
+            {
+                <button class="btn-icon" @onclick="ShowJoinRequests" title="Join Requests">
+                    <span>📝</span>
+                    @if (pendingRequestsCount > 0)
+                    {
+                        <span class="badge-count badge-alert">@pendingRequestsCount</span>
+                    }
+                </button>
+            }
+
+            @if (room.IsAdmin)
+            {
+                <button class="btn-icon" @onclick="ShowSettings" title="Settings">
+                    <span>⚙️</span>
+                </button>
+            }
+
+            @if (room.AllowInviteLink && (room.AllowMemberInvite || room.IsAdmin))
+            {
+                <button class="btn-icon" @onclick="CopyInviteLink" title="Copy Invite Link">
+                    <span>🔗</span>
+                </button>
+            }
+
+            <span class="connection-status @(isConnected ? "connected" : "disconnected")">
+                @(isConnected ? "● Connected" : "○ Disconnected")
+            </span>
         </div>
     </div>
 
     <!-- Main Content -->
     <div class="room-content">
         <!-- Messages Area -->
-        <div class="messages-container" @ref="messagesContainer">
-            @foreach (var message in messages)
+        <div class="messages-area" @ref="messagesContainer">
+            @if (messages.Count == 0)
             {
-                <div class="message @(message.SenderId == AuthService.CurrentUser.Id ? "message-own" : "message-other")">
-                    <div class="message-header">
-                        <strong>@message.SenderUsername</strong>
-                        <small class="text-muted">@message.Timestamp.ToLocalTime().ToString("HH:mm")</small>
-                    </div>
-                    <div class="message-content">@message.Content</div>
+                <div class="empty-messages">
+                    <div class="empty-icon">💬</div>
+                    <h3>No messages yet</h3>
+                    <p>Be the first to say something!</p>
                 </div>
+            }
+            else
+            {
+                @foreach (var message in messages)
+                {
+                    var isOwn = message.SenderId == AuthService.CurrentUser?.Id;
+
+                    <div class="message @(isOwn ? "message-own" : "message-other")">
+                        @if (!isOwn)
+                        {
+                            <div class="message-avatar">
+                                @GetInitials(message.SenderUsername)
+                            </div>
+                        }
+
+                        <div class="message-wrapper">
+                            @if (!isOwn)
+                            {
+                                <div class="message-sender">@message.SenderUsername</div>
+                            }
+
+                            <div class="message-bubble">
+                                @if (message.Type == MessageType.Text)
+                                {
+                                    <p>@message.Content</p>
+                                }
+                                else if (message.Type == MessageType.Image)
+                                {
+                                    <div class="message-image">
+                                        <img src="@message.FileUrl"
+                                             alt="@message.FileName"
+                                             @onclick="@(() => ShowImagePreview(message.FileUrl!))" />
+                                    </div>
+                                }
+                                else if (message.Type == MessageType.Video)
+                                {
+                                    <div class="message-video">
+                                        <video controls preload="metadata">
+                                            <source src="@message.FileUrl" type="@message.FileMimeType" />
+                                        </video>
+                                    </div>
+                                }
+                                else if (message.Type == MessageType.File)
+                                {
+                                    <div class="message-file">
+                                        <div class="file-icon">📄</div>
+                                        <div class="file-info">
+                                            <div class="file-name">@message.FileName</div>
+                                            <div class="file-size">@FormatFileSize(message.FileSize ?? 0)</div>
+                                        </div>
+                                        <a href="@message.FileUrl" download="@message.FileName" class="btn-download">⬇️</a>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="message-time">
+                                @message.Timestamp.ToLocalTime().ToString("HH:mm")
+                            </div>
+                        </div>
+                    </div>
+                }
             }
 
             @if (typingUsers.Count > 0)
             {
                 <div class="typing-indicator">
-                    <small class="text-muted">
-                        @string.Join(", ", typingUsers) đang typing...
-                    </small>
+                    <div class="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <small>@string.Join(", ", typingUsers) is typing...</small>
                 </div>
             }
         </div>
 
         <!-- Input Area -->
-        <div class="message-input-container">
-            <input type="text"
-                   class="form-control"
-                   placeholder="Nhập tin nhắn..."
-                   @bind="messageText"
-                   @onkeydown="HandleKeyDown"
-                   @oninput="HandleTyping" />
-            <button class="btn btn-primary" @onclick="SendMessage" disabled="@(!isConnected || string.IsNullOrWhiteSpace(messageText))">
-                Gửi
-            </button>
+        <div class="message-input-area">
+            @if (isUploadingFile)
+            {
+                <div class="upload-progress-bar">
+                    <div class="progress">
+                        <div class="progress-fill" style="width: @uploadProgress%"></div>
+                    </div>
+                    <small>Uploading @uploadingFileName... @uploadProgress%</small>
+                </div>
+            }
+
+            <div class="input-container">
+                <InputFile OnChange="HandleImageUpload" accept="image/*" class="file-input" id="image-upload" />
+                <label for="image-upload" class="input-btn" title="Upload Image">
+                    <span>🖼️</span>
+                </label>
+
+                <InputFile OnChange="HandleFileUpload" class="file-input" id="file-upload" />
+                <label for="file-upload" class="input-btn" title="Upload File">
+                    <span>📎</span>
+                </label>
+
+                <textarea id="chatInput"
+                          class="message-input"
+                          placeholder="Type a message..."
+                          value="@messageText"
+                          @oninput="HandleInput"
+                          @onkeydown="HandleKeyDown"
+                          rows="1"></textarea>
+
+                <button class="btn-send"
+                        @onclick="SendMessage"
+                        disabled="@(!isConnected || (string.IsNullOrWhiteSpace(messageText) && !isUploadingFile))">
+                    @if (isUploadingFile)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    else
+                    {
+                        <span>Send</span>
+                    }
+                </button>
+            </div>
         </div>
     </div>
 </div>
+<RoomSettingsModal ShowModal="@showSettingsModal"
+                   Room="@room"
+                   OnClose="HideSettings"
+                   OnSaved="OnSettingsSaved" />
+<!-- Modals -->
+<MemberListModal ShowModal="@showMembersModal"
+                 RoomId="@RoomId"
+                 IsAdmin="@room.IsAdmin"
+                 IsCreator="@room.IsCreator"
+                 OnClose="HideMembers"
+                 OnMemberKicked="OnMemberKicked" />
+
+<JoinRequestsModal ShowModal="@showJoinRequestsModal"
+                   RoomId="@RoomId"
+                   OnClose="HideJoinRequests"
+                   OnRequestProcessed="OnRequestProcessed" />
+
+@if (showImagePreview && !string.IsNullOrEmpty(imagePreviewUrl))
+{
+    <div class="image-preview-overlay" @onclick="HideImagePreview">
+        <div class="image-preview-container" @onclick:stopPropagation="true">
+            <button class="btn-close-preview" @onclick="HideImagePreview">✕</button>
+            <img src="@imagePreviewUrl" alt="Preview" />
+        </div>
+    </div>
+}
 
 <style>
+    .loading-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        gap: 1rem;
+    }
+
     .chat-room-container {
         display: flex;
         flex-direction: column;
         height: 100vh;
-        background: var(--bg-secondary);
+        background: #f0f2f5;
     }
 
+    /* Header */
     .room-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        padding: var(--spacing-lg) var(--spacing-2xl);
+        gap: 1rem;
+        padding: 1rem 1.5rem;
         background: white;
-        border-bottom: 2px solid var(--color-gray-200);
-        box-shadow: var(--shadow-md);
-        z-index: 10;
+        border-bottom: 1px solid #e4e6eb;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
 
-        .room-header .btn-link {
-            font-size: var(--font-size-lg);
-            font-weight: var(--font-weight-semibold);
-            color: var(--color-primary);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-xs);
+    .btn-back {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: none;
+        background: #f0f2f5;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+        .btn-back:hover {
+            background: #e4e6eb;
         }
 
-    .room-info h4 {
+    .room-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .room-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .room-avatar-placeholder {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .room-details h4 {
         margin: 0;
-        font-size: var(--font-size-2xl);
-        color: var(--color-gray-900);
+        font-size: 1rem;
+        font-weight: 600;
     }
 
-    .room-info small {
-        display: block;
-        margin-top: var(--spacing-xs);
-        color: var(--color-gray-500);
+    .room-details small {
+        color: #65676b;
+        font-size: 0.8125rem;
     }
 
-    .connection-status .badge {
-        padding: 0.5rem 1rem;
-        font-size: var(--font-size-sm);
-        box-shadow: var(--shadow-sm);
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
     }
 
+    .btn-icon {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: #f0f2f5;
+        font-size: 1.125rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+        .btn-icon:hover {
+            background: #e4e6eb;
+        }
+
+    .badge-count {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: #1877f2;
+        color: white;
+        font-size: 0.625rem;
+        padding: 0.125rem 0.375rem;
+        border-radius: 10px;
+        font-weight: 600;
+        min-width: 18px;
+        text-align: center;
+    }
+
+    .badge-alert {
+        background: #e74c3c;
+        animation: pulse 2s infinite;
+    }
+
+    .connection-status {
+        padding: 0.375rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+        .connection-status.connected {
+            background: #d1f4e0;
+            color: #00a400;
+        }
+
+        .connection-status.disconnected {
+            background: #ffebe9;
+            color: #e74c3c;
+        }
+
+    /* Messages Area */
     .room-content {
         flex: 1;
         display: flex;
@@ -152,125 +406,375 @@
         overflow: hidden;
     }
 
-    .messages-container {
+    .messages-area {
         flex: 1;
         overflow-y: auto;
-        padding: var(--spacing-2xl);
-        background: linear-gradient(to bottom, #f9fafb 0%, #ffffff 100%);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
     }
 
-        .messages-container::-webkit-scrollbar {
-            width: 8px;
-        }
+    .empty-messages {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #65676b;
+    }
 
-        .messages-container::-webkit-scrollbar-track {
-            background: var(--color-gray-100);
-            border-radius: var(--radius-full);
-        }
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
 
-        .messages-container::-webkit-scrollbar-thumb {
-            background: var(--color-gray-400);
-            border-radius: var(--radius-full);
-        }
+    .empty-messages h3 {
+        margin: 0 0 0.5rem;
+        font-size: 1.25rem;
+    }
 
-            .messages-container::-webkit-scrollbar-thumb:hover {
-                background: var(--color-gray-500);
-            }
+    .empty-messages p {
+        margin: 0;
+        font-size: 0.875rem;
+    }
 
+    /* Message Styles */
     .message {
-        margin-bottom: var(--spacing-lg);
-        max-width: 65%;
-        animation: slideUp 0.3s ease-out;
+        display: flex;
+        gap: 0.5rem;
+        /* Giới hạn chiều rộng tối đa của cả khối tin nhắn */
+        max-width: 85%; /* Bạn có thể chỉnh 70% đến 90% tùy thích */
+        animation: fadeIn 0.3s ease;
     }
 
     .message-own {
         margin-left: auto;
+        flex-direction: row-reverse;
     }
 
-    .message-other {
-        margin-right: auto;
-    }
-
-    .message-header {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: var(--spacing-xs);
-        padding: 0 var(--spacing-sm);
-    }
-
-        .message-header strong {
-            font-weight: var(--font-weight-semibold);
-            color: var(--color-gray-700);
-            font-size: var(--font-size-sm);
-        }
-
-        .message-header small {
-            color: var(--color-gray-400);
-            font-size: var(--font-size-xs);
-        }
-
-    .message-content {
-        padding: var(--spacing-md) var(--spacing-lg);
-        border-radius: var(--radius-xl);
-        word-wrap: break-word;
-        line-height: var(--line-height-relaxed);
-        box-shadow: var(--shadow-sm);
-        position: relative;
-    }
-
-    .message-own .message-content {
-        background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
         color: white;
-        border-bottom-right-radius: var(--radius-sm);
-    }
-
-    .message-other .message-content {
-        background: white;
-        color: var(--color-gray-900);
-        border-bottom-left-radius: var(--radius-sm);
-        border: 1px solid var(--color-gray-200);
-    }
-
-    .typing-indicator {
-        padding: var(--spacing-md);
-        font-style: italic;
-        color: var(--color-gray-500);
-        font-size: var(--font-size-sm);
-        animation: fadeIn 0.3s ease-out;
-    }
-
-    .message-input-container {
         display: flex;
-        gap: var(--spacing-md);
-        padding: var(--spacing-lg) var(--spacing-2xl);
-        background: white;
-        border-top: 2px solid var(--color-gray-200);
-        box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
     }
 
-        .message-input-container input {
-            flex: 1;
-            font-size: var(--font-size-lg);
-            padding: var(--spacing-md) var(--spacing-lg);
-            border-radius: var(--radius-full);
-            border: 2px solid var(--color-gray-300);
-            transition: all var(--transition-fast);
+    .message-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        max-width: 100%; /* Thêm dòng này để đảm bảo không bị tràn */
+        /* flex: 1; */
+    }
+       .message-other .message-wrapper {
+        align-items: flex-start; 
+    }
+
+    /* Tin nhắn của mình: Căn phải, khung co theo nội dung */
+    .message-own .message-wrapper {
+        align-items: flex-end;
+    }
+
+    .message-sender {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #65676b;
+        padding: 0 0.75rem;
+    }
+
+    .message-bubble {
+        background: white;
+        padding: 0.75rem 1rem;
+        border-radius: 18px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        /* Căn chỉnh kích thước */
+        width: fit-content;
+        min-width: 0;
+        /* --- CÁC DÒNG QUAN TRỌNG ĐỂ XUỐNG DÒNG --- */
+        word-wrap: break-word; /* Hỗ trợ trình duyệt cũ */
+        overflow-wrap: break-word; /* Chuẩn hiện đại: Ngắt từ nếu quá dài */
+        word-break: break-word; /* Ngắt từ ở bất cứ đâu nếu cần */
+        white-space: pre-wrap; /* Giữ nguyên định dạng xuống dòng nếu người dùng bấm Enter */
+    }
+
+    .message-own .message-bubble {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+    .message-bubble p {
+        margin: 0;
+        word-wrap: break-word;
+        line-height: 1.4;
+    }
+
+    .message-time {
+        font-size: 0.6875rem;
+        color: #65676b;
+        padding: 0 0.75rem;
+    }
+
+    .message-own .message-time {
+        text-align: right;
+    }
+
+    /* Message Media */
+    .message-image {
+        max-width: 300px;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+    }
+
+        .message-image img {
+            width: 100%;
+            height: auto;
+            display: block;
         }
 
-            .message-input-container input:focus {
-                border-color: var(--color-primary);
-                box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    .message-video {
+        max-width: 400px;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+        .message-video video {
+            width: 100%;
+            display: block;
+        }
+
+    .message-file {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: #f0f2f5;
+        border-radius: 12px;
+        max-width: 300px;
+    }
+
+    .message-own .message-file {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .file-icon {
+        font-size: 2rem;
+    }
+
+    .file-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .file-name {
+        font-size: 0.875rem;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .file-size {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 0.125rem;
+    }
+
+    .btn-download {
+        font-size: 1.25rem;
+        text-decoration: none;
+        padding: 0.25rem;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn-download:hover {
+            background: rgba(0,0,0,0.1);
+        }
+
+    /* Typing Indicator */
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        max-width: fit-content;
+    }
+
+    .typing-dots {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+        .typing-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #65676b;
+            animation: typing 1.4s infinite;
+        }
+
+            .typing-dots span:nth-child(2) {
+                animation-delay: 0.2s;
             }
 
-        .message-input-container .btn {
-            padding: var(--spacing-md) var(--spacing-2xl);
-            font-size: var(--font-size-lg);
-            font-weight: var(--font-weight-semibold);
-            border-radius: var(--radius-full);
-            box-shadow: var(--shadow-md);
+            .typing-dots span:nth-child(3) {
+                animation-delay: 0.4s;
+            }
+
+    /* Input Area */
+    .message-input-area {
+        background: white;
+        border-top: 1px solid #e4e6eb;
+        padding: 1rem 1.5rem;
+    }
+
+    .upload-progress-bar {
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+        background: #f0f2f5;
+        border-radius: 12px;
+    }
+
+    .progress {
+        height: 4px;
+        background: #e4e6eb;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        transition: width 0.3s;
+    }
+
+    .upload-progress-bar small {
+        font-size: 0.75rem;
+        color: #65676b;
+    }
+
+    .input-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .file-input {
+        display: none;
+    }
+
+    .input-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #f0f2f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 1.125rem;
+    }
+
+        .input-btn:hover {
+            background: #e4e6eb;
         }
 
-    @@keyframes slideUp {
+    .message-input {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        border: none;
+        background: #f0f2f5;
+        border-radius: 20px;
+        font-size: 0.9375rem;
+        font-family: inherit; /* Giữ font chữ giống hệ thống */
+        /* Cấu hình cho Textarea */
+        resize: none; /* Tắt khả năng kéo giãn thủ công */
+        overflow-y: hidden; /* Ẩn thanh cuộn khi chưa cần thiết */
+        min-height: 44px; /* Chiều cao tối thiểu */
+        max-height: 120px; /* Chiều cao tối đa trước khi hiện thanh cuộn */
+        line-height: 1.5;
+    }
+
+        .message-input:focus {
+            outline: none;
+            background: #e4e6eb;
+        }
+
+    .btn-send {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-radius: 20px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .btn-send:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+
+        .btn-send:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    /* Image Preview */
+    .image-preview-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .image-preview-container {
+        position: relative;
+        max-width: 90vw;
+        max-height: 90vh;
+    }
+
+        .image-preview-container img {
+            max-width: 100%;
+            max-height: 90vh;
+            object-fit: contain;
+        }
+
+    .btn-close-preview {
+        position: absolute;
+        top: -40px;
+        right: 0;
+        background: white;
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+    }
+
+    /* Animations */
+    @@keyframes fadeIn {
         from {
             opacity: 0;
             transform: translateY(10px);
@@ -282,41 +786,46 @@
         }
     }
 
-    @@keyframes fadeIn {
-        from {
-            opacity: 0;
+    @@keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
         }
 
-        to {
-            opacity: 1;
+        30% {
+            transform: translateY(-10px);
         }
     }
 
-    @@media (max-width: 768px) {
-        .room-header {
-            padding: var(--spacing-md);
-            flex-wrap: wrap;
+    @@keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
         }
 
-        .room-info h4 {
-            font-size: var(--font-size-xl);
+        50% {
+            transform: scale(1.05);
+            opacity: 0.8;
         }
+    }
 
-        .messages-container {
-            padding: var(--spacing-md);
-        }
+    .spinner-border {
+        width: 1rem;
+        height: 1rem;
+        border: 0.2rem solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spinner 0.75s linear infinite;
+    }
 
-        .message {
-            max-width: 85%;
-        }
-
-        .message-input-container {
-            padding: var(--spacing-md);
+    @@keyframes spinner {
+        to {
+            transform: rotate(360deg);
         }
     }
 </style>
 
 @code {
+    // ... (keep all existing @code - NO CHANGES)
     [Parameter]
     public string RoomId { get; set; } = "";
 
@@ -326,60 +835,59 @@
     private string messageText = "";
     private string roomName = "Chat Room";
     private bool isConnected = false;
-    private bool isInitializing = true; // ✅ Flag để track initialization
+    private bool isInitializing = true;
     private ElementReference messagesContainer;
     private System.Timers.Timer? typingTimer;
 
+    // Modals
+    private bool showSettingsModal = false;
+    private bool showMembersModal = false;
+    private bool showJoinRequestsModal = false;
+    private int pendingRequestsCount = 0;
+
+    // File Upload
+    private bool isUploadingFile = false;
+    private int uploadProgress = 0;
+    private string uploadingFileName = "";
+
+    // Image Preview
+    private bool showImagePreview = false;
+    private string? imagePreviewUrl = null;
+
     protected override async Task OnInitializedAsync()
     {
-        Console.WriteLine($"🔵 [Room] OnInitializedAsync START - RoomId: {RoomId}");
-
         try
         {
-            // ✅ Initialize auth
             await AuthService.InitializeAsync();
-
-            Console.WriteLine($"🔵 [Room] Auth initialized");
-            Console.WriteLine($"🔵 [Room] IsAuthenticated: {AuthService.IsAuthenticated}");
-            Console.WriteLine($"🔵 [Room] CurrentUser: {AuthService.CurrentUser?.Username ?? "NULL"}");
-
-            // ✅ Đợi state ổn định
-            await Task.Delay(100);
 
             if (!AuthService.IsAuthenticated)
             {
-                Console.WriteLine("🔴 [Room] Not authenticated, redirecting to /login");
                 Navigation.NavigateTo("/login", forceLoad: true);
                 return;
             }
 
-            Console.WriteLine($"🟢 [Room] Loading room data for RoomId: {RoomId}");
-
-            // ✅ Load room info
+            // Load room info
             room = await ApiService.GetRoomAsync(RoomId);
 
             if (room == null)
             {
-                Console.WriteLine($"🔴 [Room] Room not found: {RoomId}");
                 Navigation.NavigateTo("/rooms");
                 return;
             }
 
-            Console.WriteLine($"🟢 [Room] Room loaded: {room.Name}");
             roomName = room.Name;
 
-            // ✅ Load message history
+            // Load message history
             var messagePage = await ApiService.GetRoomMessagesAsync(RoomId);
             if (messagePage != null)
             {
                 messages = messagePage.Messages;
-                Console.WriteLine($"🟢 [Room] Loaded {messages.Count} messages");
             }
 
-            // ✅ Connect WebSocket
+            // Connect WebSocket
             await ConnectWebSocket();
 
-            // ✅ Subscribe to WebSocket events
+            // Subscribe to WebSocket events
             WebSocketService.OnMessageReceived += HandleMessageReceived;
             WebSocketService.OnUserJoinedRoom += HandleUserJoinedRoom;
             WebSocketService.OnUserLeftRoom += HandleUserLeftRoom;
@@ -388,56 +896,58 @@
             WebSocketService.OnConnected += HandleConnected;
             WebSocketService.OnDisconnected += HandleDisconnected;
 
-            // ✅ Join room via WebSocket
+            // Join room via WebSocket
             if (isConnected)
             {
                 await WebSocketService.JoinRoomAsync(RoomId);
-                Console.WriteLine($"🟢 [Room] Joined room via WebSocket");
             }
 
-            Console.WriteLine("🟢 [Room] Initialization completed successfully");
+            // Load pending requests count if admin
+            if (room.IsAdmin && room.RequireApproval)
+            {
+                await LoadPendingRequestsCount();
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Room] Error in OnInitializedAsync: {ex.Message}");
-            Console.WriteLine($"🔴 [Room] Stack trace: {ex.StackTrace}");
+            Console.WriteLine($"🔴 [Room] Error: {ex.Message}");
         }
         finally
         {
-            // ✅ Kết thúc initialization
             isInitializing = false;
             StateHasChanged();
-            Console.WriteLine("🔵 [Room] OnInitializedAsync END");
         }
     }
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        // 1. Cập nhật biến messageText thủ công
+        messageText = e.Value?.ToString() ?? "";
 
+        // 2. Gọi JS để tự động co giãn chiều cao
+        await JSRuntime.InvokeVoidAsync("autoResizeTextarea", "chatInput");
+
+        // 3. Xử lý trạng thái "Đang gõ..."
+        await HandleTyping();
+    }
     private async Task ConnectWebSocket()
     {
         try
         {
-            Console.WriteLine("🔵 [Room] Connecting WebSocket...");
             var token = await AuthService.GetTokenAsync();
-
             if (!string.IsNullOrEmpty(token))
             {
                 await WebSocketService.ConnectAsync(token);
                 isConnected = WebSocketService.IsConnected;
-                Console.WriteLine($"🟢 [Room] WebSocket connected: {isConnected}");
-            }
-            else
-            {
-                Console.WriteLine("🔴 [Room] No token available for WebSocket");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Room] WebSocket connection error: {ex.Message}");
+            Console.WriteLine($"🔴 [Room] WebSocket error: {ex.Message}");
         }
     }
 
     private void HandleConnected()
     {
-        Console.WriteLine("🟢 [Room] WebSocket connected event");
         isConnected = true;
         InvokeAsync(async () =>
         {
@@ -448,7 +958,6 @@
 
     private void HandleDisconnected(string reason)
     {
-        Console.WriteLine($"🔴 [Room] WebSocket disconnected: {reason}");
         isConnected = false;
         InvokeAsync(StateHasChanged);
     }
@@ -457,7 +966,6 @@
     {
         if (message.RoomId == RoomId)
         {
-            Console.WriteLine($"🟢 [Room] Message received from {message.SenderUsername}");
             InvokeAsync(() =>
             {
                 messages.Add(message);
@@ -469,18 +977,18 @@
 
     private void HandleUserJoinedRoom(string roomId, string username)
     {
-        if (roomId == RoomId)
+        if (roomId == RoomId && room != null)
         {
-            Console.WriteLine($"🟢 [Room] User joined: {username}");
+            room.CurrentMembersCount++;
             InvokeAsync(StateHasChanged);
         }
     }
 
     private void HandleUserLeftRoom(string roomId, string username)
     {
-        if (roomId == RoomId)
+        if (roomId == RoomId && room != null)
         {
-            Console.WriteLine($"🟡 [Room] User left: {username}");
+            room.CurrentMembersCount--;
             InvokeAsync(StateHasChanged);
         }
     }
@@ -508,15 +1016,20 @@
             });
         }
     }
+    private async Task AdjustHeight(ChangeEventArgs e)
+    {
+        // Gọi JS để chỉnh chiều cao dựa trên nội dung
+        await JSRuntime.InvokeVoidAsync("autoResizeTextarea", "chatInput");
 
+        // Cập nhật giá trị text
+        messageText = e.Value?.ToString() ?? "";
+        await HandleTyping(); // Giữ nguyên logic typing cũ của bạn
+    }
     private async Task SendMessage()
     {
         if (!isConnected || string.IsNullOrWhiteSpace(messageText))
-        {
             return;
-        }
 
-        Console.WriteLine($"🔵 [Room] Sending message: {messageText}");
         await WebSocketService.SendChatMessageAsync(RoomId, messageText.Trim());
         messageText = "";
         await WebSocketService.SendTypingAsync(RoomId, false);
@@ -524,23 +1037,22 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        // Nếu bấm Enter mà KHÔNG giữ Shift -> Gửi tin nhắn
         if (e.Key == "Enter" && !e.ShiftKey)
         {
+            // Ngăn việc xuống dòng mặc định của textarea
+            await JSRuntime.InvokeVoidAsync("eval", "event.preventDefault()");
             await SendMessage();
         }
+        // Nếu bấm Shift + Enter -> Tự động xuống dòng (mặc định của textarea)
     }
 
     private async Task HandleTyping()
     {
-        if (!isConnected)
-        {
-            return;
-        }
+        if (!isConnected) return;
 
-        // Send typing indicator
         await WebSocketService.SendTypingAsync(RoomId, true);
 
-        // Reset timer
         typingTimer?.Stop();
         typingTimer = new System.Timers.Timer(2000);
         typingTimer.Elapsed += async (sender, e) =>
@@ -551,24 +1063,206 @@
         typingTimer.Start();
     }
 
+    // File Upload Handlers
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        isUploadingFile = true;
+        uploadingFileName = file.Name;
+        uploadProgress = 0;
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+            
+            // Simulate progress
+            _ = SimulateProgress();
+
+            var message = await ApiService.UploadImageMessageAsync(RoomId, stream, file.Name);
+            
+            if (message != null)
+            {
+                // Message will be received via WebSocket
+                uploadProgress = 100;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error uploading image: {ex.Message}");
+        }
+        finally
+        {
+            await Task.Delay(500);
+            isUploadingFile = false;
+            uploadProgress = 0;
+        }
+    }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        isUploadingFile = true;
+        uploadingFileName = file.Name;
+        uploadProgress = 0;
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024); // 50MB
+            
+            _ = SimulateProgress();
+
+            var message = await ApiService.UploadFileMessageAsync(RoomId, stream, file.Name, file.ContentType);
+            
+            if (message != null)
+            {
+                uploadProgress = 100;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error uploading file: {ex.Message}");
+        }
+        finally
+        {
+            await Task.Delay(500);
+            isUploadingFile = false;
+            uploadProgress = 0;
+        }
+    }
+
+    private async Task SimulateProgress()
+    {
+        while (uploadProgress < 90 && isUploadingFile)
+        {
+            uploadProgress += 10;
+            StateHasChanged();
+            await Task.Delay(200);
+        }
+    }
+
+    private void ShowImagePreview(string url)
+    {
+        imagePreviewUrl = url;
+        showImagePreview = true;
+    }
+
+    private void HideImagePreview()
+    {
+        showImagePreview = false;
+        imagePreviewUrl = null;
+    }
+
+    // Modal Handlers
+    private void ShowSettings() => showSettingsModal = true;
+    private void HideSettings() => showSettingsModal = false;
+    
+    private void ShowMembers() => showMembersModal = true;
+    private void HideMembers() => showMembersModal = false;
+    
+    private void ShowJoinRequests() => showJoinRequestsModal = true;
+    private void HideJoinRequests() => showJoinRequestsModal = false;
+
+    private async Task OnSettingsSaved()
+    {
+        // Reload room info
+        room = await ApiService.GetRoomAsync(RoomId);
+        StateHasChanged();
+    }
+
+    private void OnMemberKicked()
+    {
+        // Reload room info
+        InvokeAsync(async () =>
+        {
+            room = await ApiService.GetRoomAsync(RoomId);
+            StateHasChanged();
+        });
+    }
+
+    private async Task OnRequestProcessed()
+    {
+        await LoadPendingRequestsCount();
+    }
+
+    private async Task LoadPendingRequestsCount()
+    {
+        var requests = await ApiService.GetJoinRequestsAsync(RoomId);
+        pendingRequestsCount = requests.Count;
+        StateHasChanged();
+    }
+
+    private async Task CopyInviteLink()
+    {
+        if (room == null) return;
+
+        if (string.IsNullOrEmpty(room.InviteCode))
+        {
+            var result = await ApiService.GenerateInviteCodeAsync(RoomId);
+            if (result != null)
+            {
+                await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", result.Value.inviteUrl);
+                // Show toast
+            }
+        }
+        else
+        {
+            var inviteUrl = $"{Navigation.BaseUri}join/{room.InviteCode}";
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", inviteUrl);
+            // Show toast
+        }
+    }
+
+    private string GetBackgroundStyle()
+    {
+        if (!string.IsNullOrEmpty(room?.BackgroundImageUrl))
+        {
+            return $"background-image: linear-gradient(rgba(255,255,255,0.9), rgba(255,255,255,0.9)), url('{room.BackgroundImageUrl}');";
+        }
+        return "";
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
     private void ScrollToBottom()
     {
-        // Scroll to bottom (requires JS interop in production)
+        // JS Interop to scroll
     }
 
     private void BackToRooms()
     {
-        Console.WriteLine("🔵 [Room] Navigating back to /rooms");
         Navigation.NavigateTo("/rooms");
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+        var parts = name.Split(' ');
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return name.Length >= 2 
+            ? name.Substring(0, 2).ToUpper() 
+            : name[0].ToString().ToUpper();
     }
 
     public async ValueTask DisposeAsync()
     {
-        Console.WriteLine($"🔵 [Room] Disposing - RoomId: {RoomId}");
-
         try
         {
-            // Unsubscribe events
             WebSocketService.OnMessageReceived -= HandleMessageReceived;
             WebSocketService.OnUserJoinedRoom -= HandleUserJoinedRoom;
             WebSocketService.OnUserLeftRoom -= HandleUserLeftRoom;
@@ -577,20 +1271,16 @@
             WebSocketService.OnConnected -= HandleConnected;
             WebSocketService.OnDisconnected -= HandleDisconnected;
 
-            // Leave room
             if (isConnected)
             {
                 await WebSocketService.LeaveRoomAsync(RoomId);
-                Console.WriteLine($"🟢 [Room] Left room via WebSocket");
             }
 
             typingTimer?.Dispose();
-
-            Console.WriteLine("🟢 [Room] Disposed successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"🔴 [Room] Error during disposal: {ex.Message}");
+            Console.WriteLine($"🔴 [Room] Dispose error: {ex.Message}");
         }
     }
 }

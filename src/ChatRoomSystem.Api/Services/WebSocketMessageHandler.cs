@@ -31,7 +31,7 @@ public class WebSocketMessageHandler
         WebSocketMessage message,
         WebSocketConnectionManager connectionManager)
     {
-        _logger.LogDebug($"Handling message type {message.Type} from user {userId}");
+        _logger.LogInformation($"📨 Handling message type {message.Type} from user {userId}");
 
         try
         {
@@ -41,7 +41,7 @@ public class WebSocketMessageHandler
                     await HandlePingAsync(userId, connectionManager);
                     break;
 
-                case WebSocketMessageType.JoinRoom:
+                case WebSocketMessageType.JoinRoomRequest:
                     await HandleJoinRoomAsync(userId, message.Data, connectionManager);
                     break;
 
@@ -61,55 +61,14 @@ public class WebSocketMessageHandler
                     await HandleTypingAsync(userId, message.Data, connectionManager, false);
                     break;
 
-                case WebSocketMessageType.TaskCreated:
-                case WebSocketMessageType.TaskUpdated:
-                case WebSocketMessageType.TaskDeleted:
-                    await HandleTaskUpdateAsync(userId, message, connectionManager);
-                    break;
-
-                case WebSocketMessageType.WhiteboardDraw:
-                    await HandleWhiteboardDrawAsync(userId, message.Data, connectionManager);
-                    break;
-
-                case WebSocketMessageType.WhiteboardClear:
-                    await HandleWhiteboardClearAsync(userId, message.Data, connectionManager);
-                    break;
-
-                case WebSocketMessageType.WebRTCOffer:
-                case WebSocketMessageType.WebRTCAnswer:
-                case WebSocketMessageType.WebRTCIceCandidate:
-                    await HandleWebRTCSignalingAsync(userId, message, connectionManager);
-                    break;
-
-                case WebSocketMessageType.CallInitiate:
-                case WebSocketMessageType.CallAccept:
-                case WebSocketMessageType.CallReject:
-                case WebSocketMessageType.CallEnd:
-                    await HandleCallSignalingAsync(userId, message, connectionManager);
-                    break;
-
-                case WebSocketMessageType.ScreenShareStart:
-                case WebSocketMessageType.ScreenShareStop:
-                    await HandleScreenShareAsync(userId, message, connectionManager);
-                    break;
-
                 default:
-                    _logger.LogWarning($"Unknown message type: {message.Type}");
-                    await connectionManager.SendMessageAsync(userId, new WebSocketMessage
-                    {
-                        Type = WebSocketMessageType.Error,
-                        Data = JsonSerializer.Serialize(new ErrorPayload
-                        {
-                            Message = $"Unknown message type: {message.Type}",
-                            Code = "UNKNOWN_MESSAGE_TYPE"
-                        })
-                    });
+                    _logger.LogWarning($"⚠️ Unknown message type: {message.Type}");
                     break;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error handling message type {message.Type} from user {userId}");
+            _logger.LogError(ex, $"🔴 Error handling message type {message.Type} from user {userId}");
             await connectionManager.SendMessageAsync(userId, new WebSocketMessage
             {
                 Type = WebSocketMessageType.Error,
@@ -124,9 +83,6 @@ public class WebSocketMessageHandler
 
     #region Message Handlers
 
-    /// <summary>
-    /// Handle Ping message (heartbeat)
-    /// </summary>
     private async Task HandlePingAsync(string userId, WebSocketConnectionManager connectionManager)
     {
         await connectionManager.SendMessageAsync(userId, new WebSocketMessage
@@ -135,9 +91,6 @@ public class WebSocketMessageHandler
         });
     }
 
-    /// <summary>
-    /// Handle Join Room message
-    /// </summary>
     private async Task HandleJoinRoomAsync(
         string userId,
         string? data,
@@ -159,7 +112,7 @@ public class WebSocketMessageHandler
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ChatRoomDbContext>();
 
-        // Check if user is member của room
+        // Check if user is member
         var isMember = await dbContext.RoomMembers
             .AnyAsync(rm => rm.RoomId == payload.RoomId && rm.UserId == userId);
 
@@ -169,7 +122,7 @@ public class WebSocketMessageHandler
             return;
         }
 
-        // Add user vào room trong connection manager
+        // Add user to room
         connectionManager.AddUserToRoom(userId, payload.RoomId);
 
         // Send confirmation
@@ -195,12 +148,9 @@ public class WebSocketMessageHandler
             },
             excludeUserId: userId);
 
-        _logger.LogInformation($"User {userId} joined room {payload.RoomId}");
+        _logger.LogInformation($"✅ User {userId} joined room {payload.RoomId}");
     }
 
-    /// <summary>
-    /// Handle Leave Room message
-    /// </summary>
     private async Task HandleLeaveRoomAsync(
         string userId,
         string? data,
@@ -217,17 +167,14 @@ public class WebSocketMessageHandler
             return;
         }
 
-        // Remove user khỏi room
         connectionManager.RemoveUserFromRoom(userId, payload.RoomId);
 
-        // Send confirmation
         await connectionManager.SendMessageAsync(userId, new WebSocketMessage
         {
             Type = WebSocketMessageType.RoomLeft,
             Data = JsonSerializer.Serialize(new { roomId = payload.RoomId })
         });
 
-        // Notify other users
         var userInfo = connectionManager.GetUserInfo(userId);
         await connectionManager.BroadcastToRoomAsync(
             payload.RoomId,
@@ -242,11 +189,11 @@ public class WebSocketMessageHandler
                 })
             });
 
-        _logger.LogInformation($"User {userId} left room {payload.RoomId}");
+        _logger.LogInformation($"👋 User {userId} left room {payload.RoomId}");
     }
 
     /// <summary>
-    /// Handle Chat Message
+    /// ✅ FIX: Handle Chat Message - Broadcast to ALL users including sender
     /// </summary>
     private async Task HandleChatMessageAsync(
         string userId,
@@ -266,6 +213,8 @@ public class WebSocketMessageHandler
             return;
         }
 
+        _logger.LogInformation($"💬 Processing chat message from {userId} to room {payload.RoomId}: {payload.Content}");
+
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ChatRoomDbContext>();
 
@@ -275,6 +224,7 @@ public class WebSocketMessageHandler
 
         if (!isMember)
         {
+            _logger.LogWarning($"⚠️ User {userId} is not a member of room {payload.RoomId}");
             await SendErrorAsync(userId, "You are not a member of this room", "NOT_MEMBER", connectionManager);
             return;
         }
@@ -283,6 +233,7 @@ public class WebSocketMessageHandler
         var user = await dbContext.Users.FindAsync(userId);
         if (user == null)
         {
+            _logger.LogError($"🔴 User {userId} not found in database");
             return;
         }
 
@@ -299,7 +250,9 @@ public class WebSocketMessageHandler
         dbContext.Messages.Add(message);
         await dbContext.SaveChangesAsync();
 
-        // Broadcast message đến all users trong room
+        _logger.LogInformation($"💾 Message saved to database: {message.Id}");
+
+        // Create DTO
         var messageDto = new MessageDto
         {
             Id = message.Id,
@@ -311,20 +264,32 @@ public class WebSocketMessageHandler
             Timestamp = message.Timestamp
         };
 
-        await connectionManager.BroadcastToRoomAsync(
-            payload.RoomId,
-            new WebSocketMessage
-            {
-                Type = WebSocketMessageType.MessageReceived,
-                Data = JsonSerializer.Serialize(messageDto)
-            });
+        // ✅ FIX: Broadcast to ALL users in room (including sender)
+        var broadcastMessage = new WebSocketMessage
+        {
+            Type = WebSocketMessageType.MessageReceived,
+            Data = JsonSerializer.Serialize(messageDto)
+        };
 
-        _logger.LogInformation($"Message sent by user {userId} to room {payload.RoomId}");
+        var usersInRoom = connectionManager.GetUsersInRoom(payload.RoomId);
+        _logger.LogInformation($"📢 Broadcasting message to {usersInRoom.Count} users in room {payload.RoomId}");
+
+        foreach (var targetUserId in usersInRoom)
+        {
+            try
+            {
+                await connectionManager.SendMessageAsync(targetUserId, broadcastMessage);
+                _logger.LogDebug($"✉️ Sent message to user {targetUserId}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"🔴 Failed to send message to user {targetUserId}");
+            }
+        }
+
+        _logger.LogInformation($"✅ Message broadcast complete for room {payload.RoomId}");
     }
 
-    /// <summary>
-    /// Handle Typing indicator
-    /// </summary>
     private async Task HandleTypingAsync(
         string userId,
         string? data,
@@ -359,185 +324,6 @@ public class WebSocketMessageHandler
             excludeUserId: userId);
     }
 
-    /// <summary>
-    /// Handle Task updates (broadcast to room)
-    /// </summary>
-    private async Task HandleTaskUpdateAsync(
-        string userId,
-        WebSocketMessage message,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(message.Data))
-        {
-            return;
-        }
-
-        // Parse để get roomId
-        var taskData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
-        if (taskData == null || !taskData.ContainsKey("roomId"))
-        {
-            return;
-        }
-
-        var roomId = taskData["roomId"].GetString();
-        if (string.IsNullOrEmpty(roomId))
-        {
-            return;
-        }
-
-        // Broadcast task update đến all users trong room
-        await connectionManager.BroadcastToRoomAsync(
-            roomId,
-            message,
-            excludeUserId: userId);
-    }
-
-    /// <summary>
-    /// Handle Whiteboard Draw
-    /// </summary>
-    private async Task HandleWhiteboardDrawAsync(
-        string userId,
-        string? data,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(data))
-        {
-            return;
-        }
-
-        var payload = JsonSerializer.Deserialize<WhiteboardPayload>(data);
-        if (payload == null || string.IsNullOrEmpty(payload.RoomId))
-        {
-            return;
-        }
-
-        // Broadcast drawing data đến all users trong room
-        await connectionManager.BroadcastToRoomAsync(
-            payload.RoomId,
-            new WebSocketMessage
-            {
-                Type = WebSocketMessageType.WhiteboardData,
-                Data = data
-            },
-            excludeUserId: userId);
-    }
-
-    /// <summary>
-    /// Handle Whiteboard Clear
-    /// </summary>
-    private async Task HandleWhiteboardClearAsync(
-        string userId,
-        string? data,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(data))
-        {
-            return;
-        }
-
-        var payload = JsonSerializer.Deserialize<WhiteboardPayload>(data);
-        if (payload == null || string.IsNullOrEmpty(payload.RoomId))
-        {
-            return;
-        }
-
-        // Broadcast clear command
-        await connectionManager.BroadcastToRoomAsync(
-            payload.RoomId,
-            new WebSocketMessage
-            {
-                Type = WebSocketMessageType.WhiteboardClear,
-                Data = data
-            },
-            excludeUserId: userId);
-    }
-
-    /// <summary>
-    /// Handle WebRTC Signaling (Offer/Answer/ICE Candidate)
-    /// </summary>
-    private async Task HandleWebRTCSignalingAsync(
-        string userId,
-        WebSocketMessage message,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(message.Data))
-        {
-            return;
-        }
-
-        var payload = JsonSerializer.Deserialize<WebRTCSignalPayload>(message.Data);
-        if (payload == null || string.IsNullOrEmpty(payload.ToUserId))
-        {
-            return;
-        }
-
-        // Forward signaling message đến target user
-        await connectionManager.SendMessageAsync(payload.ToUserId, message);
-    }
-
-    /// <summary>
-    /// Handle Call Signaling (Initiate/Accept/Reject/End)
-    /// </summary>
-    private async Task HandleCallSignalingAsync(
-        string userId,
-        WebSocketMessage message,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(message.Data))
-        {
-            return;
-        }
-
-        var payload = JsonSerializer.Deserialize<WebRTCSignalPayload>(message.Data);
-        if (payload == null)
-        {
-            return;
-        }
-
-        // If ToUserId specified, send to specific user
-        if (!string.IsNullOrEmpty(payload.ToUserId))
-        {
-            await connectionManager.SendMessageAsync(payload.ToUserId, message);
-        }
-        // If RoomId specified, broadcast to room
-        else if (!string.IsNullOrEmpty(payload.RoomId))
-        {
-            await connectionManager.BroadcastToRoomAsync(payload.RoomId, message, excludeUserId: userId);
-        }
-    }
-
-    /// <summary>
-    /// Handle Screen Share events
-    /// </summary>
-    private async Task HandleScreenShareAsync(
-        string userId,
-        WebSocketMessage message,
-        WebSocketConnectionManager connectionManager)
-    {
-        if (string.IsNullOrEmpty(message.Data))
-        {
-            return;
-        }
-
-        var payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message.Data);
-        if (payload == null || !payload.ContainsKey("roomId"))
-        {
-            return;
-        }
-
-        var roomId = payload["roomId"].GetString();
-        if (string.IsNullOrEmpty(roomId))
-        {
-            return;
-        }
-
-        // Broadcast screen share event
-        await connectionManager.BroadcastToRoomAsync(roomId, message, excludeUserId: userId);
-    }
-
-    /// <summary>
-    /// Send error message to user
-    /// </summary>
     private async Task SendErrorAsync(
         string userId,
         string message,

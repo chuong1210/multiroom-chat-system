@@ -1,0 +1,349 @@
+﻿@using ChatRoomSystem.Shared.Models
+@using ChatRoomSystem.Client.Services
+@inject ApiService ApiService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+@if (ShowModal && Room != null)
+{
+    <div class="modal-overlay" @onclick="HandleBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>⚙️ Room Settings</h3>
+                <button class="btn-close" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Room Name</label>
+                    <input type="text" class="form-control" @bind="roomName" />
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" rows="3" @bind="roomDescription"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Topic</label>
+                    <input type="text" class="form-control" @bind="roomTopic" />
+                </div>
+
+                @if (Room.IsAdmin && Room.AllowInviteLink)
+                {
+                    <div class="form-group">
+                        <label>Invite Link</label>
+                        @if (!string.IsNullOrEmpty(inviteUrl))
+                        {
+                            <div class="invite-link-box">
+                                <input type="text" class="form-control" value="@inviteUrl" readonly />
+                                <button class="btn btn-sm btn-primary" @onclick="CopyInviteLink">📋 Copy</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary" @onclick="GenerateInviteLink">
+                                🔗 Generate Invite Link
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="Close">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveSettings" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    else
+                    {
+                        <span>💾 Save</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-dialog {
+        position: relative;
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        pointer-events: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn-close:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.875rem;
+    }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+        }
+
+    .invite-link-box {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+        .invite-link-box .form-control {
+            flex: 1;
+        }
+
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: none;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+
+    .btn-secondary {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .spinner-border {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 0.2rem solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spinner 0.75s linear infinite;
+    }
+
+    .spinner-border-sm {
+        width: 0.875rem;
+        height: 0.875rem;
+        border-width: 0.15rem;
+    }
+
+    @@keyframes spinner {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public bool ShowModal { get; set; }
+
+    [Parameter]
+    public RoomDto? Room { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    private string roomName = "";
+    private string roomDescription = "";
+    private string roomTopic = "";
+    private string? inviteUrl = null;
+    private bool isSaving = false;
+
+    protected override void OnParametersSet()
+    {
+        if (Room != null)
+        {
+            roomName = Room.Name;
+            roomDescription = Room.Description;
+            roomTopic = Room.Topic;
+
+            if (!string.IsNullOrEmpty(Room.InviteCode))
+            {
+                inviteUrl = $"{NavigationManager.BaseUri}join/{Room.InviteCode}";
+            }
+        }
+    }
+
+    private void HandleBackdropClick()
+    {
+        Close();
+    }
+
+    private async Task GenerateInviteLink()
+    {
+        if (Room == null) return;
+
+        try
+        {
+            var result = await ApiService.GenerateInviteCodeAsync(Room.Id);
+            if (result != null)
+            {
+                inviteUrl = result.Value.inviteUrl;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error generating invite link: {ex.Message}");
+        }
+    }
+
+    private async Task CopyInviteLink()
+    {
+        if (!string.IsNullOrEmpty(inviteUrl))
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", inviteUrl);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error copying to clipboard: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (Room == null) return;
+
+        isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var updateDto = new UpdateRoomDto
+            {
+                Name = roomName,
+                Description = roomDescription,
+                Topic = roomTopic
+            };
+
+            var updated = await ApiService.UpdateRoomAsync(Room.Id, updateDto);
+            if (updated != null)
+            {
+                await OnSaved.InvokeAsync();
+                await Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving settings: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

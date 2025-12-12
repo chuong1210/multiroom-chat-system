@@ -1,3 +1,4 @@
+// ChatRoomSystem.Shared/Models/WebSocketMessage.cs
 using System;
 using System.Collections.Generic;
 
@@ -12,6 +13,7 @@ public enum WebSocketMessageType
     Authenticate,
     AuthenticationSuccess,
     AuthenticationFailed,
+    Text,
 
     // Chat messages
     ChatMessage,
@@ -19,7 +21,7 @@ public enum WebSocketMessageType
     MessageHistory,
 
     // Room management
-    JoinRoom,
+    JoinRoomRequest,      // ✅ Đổi từ JoinRoom -> JoinRoomRequest
     LeaveRoom,
     RoomJoined,
     RoomLeft,
